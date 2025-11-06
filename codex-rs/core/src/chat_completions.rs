@@ -40,6 +40,7 @@ pub(crate) async fn stream_chat_completions(
     model_family: &ModelFamily,
     client: &CodexHttpClient,
     provider: &ModelProviderInfo,
+    auth: &Option<crate::CodexAuth>,
     otel_event_manager: &OtelEventManager,
 ) -> Result<ResponseStream> {
     if prompt.output_schema.is_some() {
@@ -334,7 +335,7 @@ pub(crate) async fn stream_chat_completions(
 
     debug!(
         "POST to {}: {}",
-        provider.get_full_url(&None),
+        provider.get_full_url(auth),
         serde_json::to_string_pretty(&payload).unwrap_or_default()
     );
 
@@ -343,7 +344,7 @@ pub(crate) async fn stream_chat_completions(
     loop {
         attempt += 1;
 
-        let req_builder = provider.create_request_builder(client, &None).await?;
+        let req_builder = provider.create_request_builder(client, auth).await?;
 
         let res = otel_event_manager
             .log_request(attempt, || {
