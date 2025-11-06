@@ -3,6 +3,7 @@
 use codex_core::AuthManager;
 use codex_core::auth::AuthCredentialsStoreMode;
 use codex_core::auth::CLIENT_ID;
+use codex_core::auth::OCA_CLIENT_ID;
 use codex_core::auth::login_with_api_key;
 use codex_core::auth::read_openai_api_key_from_env;
 use codex_login::ServerOptions;
@@ -98,12 +99,18 @@ impl KeyboardHandler for AuthModeWidget {
                 }
             }
             KeyCode::Char('2') => {
+                if self.is_oca_login_allowed() {
+                    self.start_oca_login();
+                }
+            }
+            KeyCode::Char('3') => {
                 if self.is_api_login_allowed() {
                     self.start_api_key_entry();
                 } else {
                     self.disallow_api_login();
                 }
             }
+
             KeyCode::Enter => {
                 let sign_in_state = { (*self.sign_in_state.read().unwrap()).clone() };
                 match sign_in_state {
@@ -111,10 +118,13 @@ impl KeyboardHandler for AuthModeWidget {
                         AuthMode::ChatGPT if self.is_chatgpt_login_allowed() => {
                             self.start_chatgpt_login();
                         }
+                        AuthMode::OCA if self.is_oca_login_allowed() => {
+                            self.start_oca_login();
+                        }
                         AuthMode::ApiKey if self.is_api_login_allowed() => {
                             self.start_api_key_entry();
                         }
-                        AuthMode::ChatGPT => {}
+                        AuthMode::ChatGPT | AuthMode::OCA => {}
                         AuthMode::ApiKey => {
                             self.disallow_api_login();
                         }
@@ -162,6 +172,10 @@ impl AuthModeWidget {
     }
 
     fn is_chatgpt_login_allowed(&self) -> bool {
+        !matches!(self.forced_login_method, Some(ForcedLoginMethod::Api))
+    }
+
+    fn is_oca_login_allowed(&self) -> bool {
         !matches!(self.forced_login_method, Some(ForcedLoginMethod::Api))
     }
 
@@ -226,9 +240,16 @@ impl AuthModeWidget {
             chatgpt_description,
         ));
         lines.push("".into());
+        lines.extend(create_mode_item(
+            1,
+            AuthMode::OCA,
+            "Sign in with OCA",
+            "Sign in with Oracle Code Assist",
+        ));
+        lines.push("".into());
         if self.is_api_login_allowed() {
             lines.extend(create_mode_item(
-                1,
+                2,
                 AuthMode::ApiKey,
                 "Provide your own API key",
                 "Pay for what you use",
@@ -561,6 +582,79 @@ impl AuthModeWidget {
             self.forced_chatgpt_workspace_id.clone(),
             self.cli_auth_credentials_store_mode,
         );
+        match run_login_server(opts) {
+            Ok(child) => {
+                let sign_in_state = self.sign_in_state.clone();
+                let request_frame = self.request_frame.clone();
+                let auth_manager = self.auth_manager.clone();
+                tokio::spawn(async move {
+                    let auth_url = child.auth_url.clone();
+                    {
+                        *sign_in_state.write().unwrap() =
+                            SignInState::ChatGptContinueInBrowser(ContinueInBrowserState {
+                                auth_url,
+                                shutdown_flag: Some(child.cancel_handle()),
+                            });
+                    }
+                    request_frame.schedule_frame();
+                    let r = child.block_until_done().await;
+                    match r {
+                        Ok(()) => {
+                            // Force the auth manager to reload the new auth information.
+                            auth_manager.reload();
+
+                            *sign_in_state.write().unwrap() = SignInState::ChatGptSuccessMessage;
+                            request_frame.schedule_frame();
+                        }
+                        _ => {
+                            *sign_in_state.write().unwrap() = SignInState::PickMode;
+                            // self.error = Some(e.to_string());
+                            request_frame.schedule_frame();
+                        }
+                    }
+                });
+            }
+            Err(e) => {
+                *self.sign_in_state.write().unwrap() = SignInState::PickMode;
+                self.error = Some(e.to_string());
+                self.request_frame.schedule_frame();
+            }
+        }
+    }
+
+    fn start_oca_login(&mut self) {
+        // If we're already authenticated with OCA, don't start a new login –
+        // just proceed to the success message flow.
+        if matches!(self.login_status, LoginStatus::AuthMode(AuthMode::OCA)) {
+            *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+            self.request_frame.schedule_frame();
+            return;
+        }
+        // https://idcs-9dc693e80d9b469480d7afe00e743931.identity.oraclecloud.com/oauth/authorize?
+        // response_type=code&
+        // client_id=a8331954c0cf48ba99b5dd223a14c6ea&
+        // redirect_uri=http%3A%2F%2Flocalhost%3A8669%2Fauth%2Fcallback&
+        // scope=openid%20profile%20email%20offline_access&
+        // code_challenge=po_49S6hmoDvKlAXaiMWehj5TUV3_99wPcd2bdnGszw&c
+        // ode_challenge_method=S256&
+        // d_token_add_organizations=true&
+        // codex_cli_simplified_flow=true&
+        // state=N1rU1jzM6Hwm_z9ESVoZtIiu4nlNtifywDcE1a1K0YQ&
+        // originator=codex_cli_rs
+        self.error = None;
+        let opts = ServerOptions {
+            codex_home: self.codex_home.clone(),
+            client_id: OCA_CLIENT_ID.to_string(),
+            issuer: "https://idcs-9dc693e80d9b469480d7afe00e743931.identity.oraclecloud.com"
+                .to_string(),
+            issuer_path_prefix: "/oauth2/v1".to_string(),
+            redirect_callback_path: "/callback".to_string(),
+            port: 8669,
+            open_browser: true,
+            force_state: None,
+            forced_chatgpt_workspace_id: self.forced_chatgpt_workspace_id.clone(),
+            cli_auth_credentials_store_mode: self.cli_auth_credentials_store_mode,
+        };
         match run_login_server(opts) {
             Ok(child) => {
                 let sign_in_state = self.sign_in_state.clone();

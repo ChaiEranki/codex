@@ -178,6 +178,7 @@ pub async fn run_device_code_login(opts: ServerOptions) -> std::io::Result<()> {
 
     let tokens = crate::server::exchange_code_for_tokens(
         base_url,
+        &opts.issuer_path_prefix,
         &opts.client_id,
         &redirect_uri,
         &pkce,

@@ -138,7 +138,7 @@ impl CodexAuth {
     pub async fn get_token(&self) -> Result<String, std::io::Error> {
         match self.mode {
             AuthMode::ApiKey => Ok(self.api_key.clone().unwrap_or_default()),
-            AuthMode::ChatGPT => {
+            AuthMode::ChatGPT | AuthMode::OCA => {
                 let id_token = self.get_token_data().await?.access_token;
                 Ok(id_token)
             }
@@ -280,12 +280,29 @@ pub async fn enforce_login_restrictions(config: &Config) -> std::io::Result<()> 
         let method_violation = match (required_method, auth.mode) {
             (ForcedLoginMethod::Api, AuthMode::ApiKey) => None,
             (ForcedLoginMethod::Chatgpt, AuthMode::ChatGPT) => None,
+            (ForcedLoginMethod::OCA, AuthMode::OCA) => None,
             (ForcedLoginMethod::Api, AuthMode::ChatGPT) => Some(
                 "API key login is required, but ChatGPT is currently being used. Logging out."
                     .to_string(),
             ),
+            (ForcedLoginMethod::Api, AuthMode::OCA) => Some(
+                "API key login is required, but OCA is currently being used. Logging out."
+                    .to_string(),
+            ),
             (ForcedLoginMethod::Chatgpt, AuthMode::ApiKey) => Some(
                 "ChatGPT login is required, but an API key is currently being used. Logging out."
+                    .to_string(),
+            ),
+            (ForcedLoginMethod::OCA, AuthMode::ApiKey) => Some(
+                "OCA login is required, but an API key is currently being used. Logging out."
+                    .to_string(),
+            ),
+            (ForcedLoginMethod::OCA, AuthMode::ChatGPT) => Some(
+                "OCA login is required, but Chatgpt login is currently being used. Logging out."
+                    .to_string(),
+            ),
+            (ForcedLoginMethod::Chatgpt, AuthMode::OCA) => Some(
+                "Chatgpt login is required, but OCA login is currently being used. Logging out."
                     .to_string(),
             ),
         };
@@ -386,7 +403,7 @@ fn load_auth(
 
     Ok(Some(CodexAuth {
         api_key: None,
-        mode: AuthMode::ChatGPT,
+        mode: AuthMode::OCA,
         storage: storage.clone(),
         auth_dot_json: Arc::new(Mutex::new(Some(AuthDotJson {
             openai_api_key: None,
@@ -474,6 +491,7 @@ struct RefreshResponse {
 
 // Shared constant for token refresh (client id used for oauth token refresh flow)
 pub const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+pub const OCA_CLIENT_ID: &str = "a8331954c0cf48ba99b5dd223a14c6ea";
 
 use std::sync::RwLock;
 

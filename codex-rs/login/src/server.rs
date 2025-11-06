@@ -29,6 +29,8 @@ use tiny_http::Server;
 use tiny_http::StatusCode;
 
 const DEFAULT_ISSUER: &str = "https://auth.openai.com";
+const DEFAULT_REDIRECT_CALLBACK_PATH: &str = "/auth/callback";
+const DEFAULT_ISSUER_PATH_PREFIX: &str = "/oauth";
 const DEFAULT_PORT: u16 = 1455;
 
 #[derive(Debug, Clone)]
@@ -36,6 +38,8 @@ pub struct ServerOptions {
     pub codex_home: PathBuf,
     pub client_id: String,
     pub issuer: String,
+    pub issuer_path_prefix: String,
+    pub redirect_callback_path: String,
     pub port: u16,
     pub open_browser: bool,
     pub force_state: Option<String>,
@@ -54,6 +58,8 @@ impl ServerOptions {
             codex_home,
             client_id,
             issuer: DEFAULT_ISSUER.to_string(),
+            issuer_path_prefix: DEFAULT_ISSUER_PATH_PREFIX.to_string(),
+            redirect_callback_path: DEFAULT_REDIRECT_CALLBACK_PATH.to_string(),
             port: DEFAULT_PORT,
             open_browser: true,
             force_state: None,
@@ -113,9 +119,13 @@ pub fn run_login_server(opts: ServerOptions) -> io::Result<LoginServer> {
     };
     let server = Arc::new(server);
 
-    let redirect_uri = format!("http://localhost:{actual_port}/auth/callback");
+    let redirect_uri = format!(
+        "http://localhost:{actual_port}{0}",
+        opts.redirect_callback_path
+    );
     let auth_url = build_authorize_url(
         &opts.issuer,
+        &opts.issuer_path_prefix,
         &opts.client_id,
         &redirect_uri,
         &pkce,
@@ -182,7 +192,7 @@ pub fn run_login_server(opts: ServerOptions) -> io::Result<LoginServer> {
                                 let _ = tokio::task::spawn_blocking(move || req.respond(redirect)).await;
                                 None
                             }
-                        };
+                    };
 
                         if let Some(result) = exit_result {
                             break result;
@@ -236,7 +246,7 @@ async fn process_request(
     let path = parsed_url.path().to_string();
 
     match path.as_str() {
-        "/auth/callback" => {
+        s if s == opts.redirect_callback_path.as_str() => {
             let params: std::collections::HashMap<String, String> =
                 parsed_url.query_pairs().into_owned().collect();
             if params.get("state").map(String::as_str) != Some(state) {
@@ -253,8 +263,15 @@ async fn process_request(
                 }
             };
 
-            match exchange_code_for_tokens(&opts.issuer, &opts.client_id, redirect_uri, pkce, &code)
-                .await
+            match exchange_code_for_tokens(
+                &opts.issuer,
+                &opts.issuer_path_prefix,
+                &opts.client_id,
+                redirect_uri,
+                pkce,
+                &code,
+            )
+            .await
             {
                 Ok(tokens) => {
                     if let Err(message) = ensure_workspace_allowed(
@@ -265,9 +282,14 @@ async fn process_request(
                         return login_error_response(&message);
                     }
                     // Obtain API key via token-exchange and persist
-                    let api_key = obtain_api_key(&opts.issuer, &opts.client_id, &tokens.id_token)
-                        .await
-                        .ok();
+                    let api_key = obtain_api_key(
+                        &opts.issuer,
+                        &opts.issuer_path_prefix,
+                        &opts.client_id,
+                        &tokens.id_token,
+                    )
+                    .await
+                    .ok();
                     if let Err(err) = persist_tokens_async(
                         &opts.codex_home,
                         api_key.clone(),
@@ -379,6 +401,7 @@ fn send_response_with_disconnect(
 
 fn build_authorize_url(
     issuer: &str,
+    issuer_path_prefix: &str,
     client_id: &str,
     redirect_uri: &str,
     pkce: &PkceCodes,
@@ -414,7 +437,7 @@ fn build_authorize_url(
         .map(|(k, v)| format!("{k}={}", urlencoding::encode(&v)))
         .collect::<Vec<_>>()
         .join("&");
-    format!("{issuer}/oauth/authorize?{qs}")
+    format!("{issuer}{issuer_path_prefix}/authorize?{qs}")
 }
 
 fn generate_state() -> String {
@@ -493,6 +516,7 @@ pub(crate) struct ExchangedTokens {
 
 pub(crate) async fn exchange_code_for_tokens(
     issuer: &str,
+    issuer_path_prefix: &str,
     client_id: &str,
     redirect_uri: &str,
     pkce: &PkceCodes,
@@ -507,7 +531,7 @@ pub(crate) async fn exchange_code_for_tokens(
 
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{issuer}/oauth/token"))
+        .post(format!("{issuer}{issuer_path_prefix}/token"))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(format!(
             "grant_type=authorization_code&code={}&redirect_uri={}&client_id={}&code_verifier={}",
@@ -528,6 +552,10 @@ pub(crate) async fn exchange_code_for_tokens(
     }
 
     let tokens: TokenResponse = resp.json().await.map_err(io::Error::other)?;
+    eprintln!(
+        "id_token: {}, access_token: {}, refresh_token: {}",
+        tokens.id_token, tokens.access_token, tokens.refresh_token
+    );
     Ok(ExchangedTokens {
         id_token: tokens.id_token,
         access_token: tokens.access_token,
@@ -687,6 +715,7 @@ fn login_error_response(message: &str) -> HandledRequest {
 
 pub(crate) async fn obtain_api_key(
     issuer: &str,
+    issuer_path_prefix: &str,
     client_id: &str,
     id_token: &str,
 ) -> io::Result<String> {
@@ -697,7 +726,7 @@ pub(crate) async fn obtain_api_key(
     }
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{issuer}/oauth/token"))
+        .post(format!("{issuer}{issuer_path_prefix}/token"))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(format!(
             "grant_type={}&client_id={}&requested_token={}&subject_token={}&subject_token_type={}",

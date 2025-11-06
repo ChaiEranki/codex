@@ -44,6 +44,7 @@ impl GitSha {
 pub enum AuthMode {
     ApiKey,
     ChatGPT,
+    OCA,
 }
 
 /// Generates an `enum ClientRequest` where each variant is a request that the

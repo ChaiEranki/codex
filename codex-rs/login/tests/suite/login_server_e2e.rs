@@ -85,7 +85,8 @@ async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
     let chatgpt_account_id = "12345678-0000-0000-0000-000000000000";
     let (issuer_addr, issuer_handle) = start_mock_issuer(chatgpt_account_id);
     let issuer = format!("http://{}:{}", issuer_addr.ip(), issuer_addr.port());
-
+    let issuer_path_prefix: String = "/oauth".to_string();
+    let redirect_callback_path: String = "/auth/callback".to_string();
     let tmp = tempdir()?;
     let codex_home = tmp.path().to_path_buf();
 
@@ -114,6 +115,8 @@ async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix,
+        redirect_callback_path,
         port: 0,
         open_browser: false,
         force_state: Some(state),
@@ -162,6 +165,8 @@ async fn creates_missing_codex_home_dir() -> Result<()> {
 
     let (issuer_addr, _issuer_handle) = start_mock_issuer("org-123");
     let issuer = format!("http://{}:{}", issuer_addr.ip(), issuer_addr.port());
+    let issuer_path_prefix: String = "/oauth".to_string();
+    let redirect_callback_path: String = "/auth/callback".to_string();
 
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("missing-subdir"); // does not exist
@@ -175,6 +180,8 @@ async fn creates_missing_codex_home_dir() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix,
+        redirect_callback_path,
         port: 0,
         open_browser: false,
         force_state: Some(state),
@@ -204,6 +211,8 @@ async fn forced_chatgpt_workspace_id_mismatch_blocks_login() -> Result<()> {
 
     let (issuer_addr, _issuer_handle) = start_mock_issuer("org-actual");
     let issuer = format!("http://{}:{}", issuer_addr.ip(), issuer_addr.port());
+    let issuer_path_prefix: String = "/oauth".to_string();
+    let redirect_callback_path: String = "/auth/callback".to_string();
 
     let tmp = tempdir()?;
     let codex_home = tmp.path().to_path_buf();
@@ -214,6 +223,8 @@ async fn forced_chatgpt_workspace_id_mismatch_blocks_login() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix,
+        redirect_callback_path,
         port: 0,
         open_browser: false,
         force_state: Some(state.clone()),
@@ -261,6 +272,8 @@ async fn cancels_previous_login_server_when_port_is_in_use() -> Result<()> {
 
     let (issuer_addr, _issuer_handle) = start_mock_issuer("org-123");
     let issuer = format!("http://{}:{}", issuer_addr.ip(), issuer_addr.port());
+    let issuer_path_prefix: String = "/oauth".to_string();
+    let redirect_callback_path: String = "/auth/callback".to_string();
 
     let first_tmp = tempdir()?;
     let first_codex_home = first_tmp.path().to_path_buf();
@@ -270,6 +283,8 @@ async fn cancels_previous_login_server_when_port_is_in_use() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer: issuer.clone(),
+        issuer_path_prefix: issuer_path_prefix.clone(),
+        redirect_callback_path: redirect_callback_path.clone(),
         port: 0,
         open_browser: false,
         force_state: Some("cancel_state".to_string()),
@@ -290,6 +305,8 @@ async fn cancels_previous_login_server_when_port_is_in_use() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix,
+        redirect_callback_path,
         port: login_port,
         open_browser: false,
         force_state: Some("cancel_state_2".to_string()),

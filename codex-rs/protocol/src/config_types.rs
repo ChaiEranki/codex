@@ -83,5 +83,6 @@ pub enum SandboxMode {
 #[strum(serialize_all = "lowercase")]
 pub enum ForcedLoginMethod {
     Chatgpt,
+    OCA,
     Api,
 }
