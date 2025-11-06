@@ -1106,6 +1106,7 @@ mod tests {
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
             requires_openai_auth: false,
+            requires_oracle_code_assist_auth: false,
         };
 
         let otel_event_manager = otel_event_manager();
@@ -1170,6 +1171,7 @@ mod tests {
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
             requires_openai_auth: false,
+            requires_oracle_code_assist_auth: false,
         };
 
         let otel_event_manager = otel_event_manager();
@@ -1207,6 +1209,7 @@ mod tests {
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
             requires_openai_auth: false,
+            requires_oracle_code_assist_auth: false,
         };
 
         let otel_event_manager = otel_event_manager();
@@ -1246,6 +1249,7 @@ mod tests {
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
             requires_openai_auth: false,
+            requires_oracle_code_assist_auth: false,
         };
 
         let otel_event_manager = otel_event_manager();
@@ -1281,6 +1285,7 @@ mod tests {
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
             requires_openai_auth: false,
+            requires_oracle_code_assist_auth: false,
         };
 
         let otel_event_manager = otel_event_manager();
@@ -1385,6 +1390,7 @@ mod tests {
                 stream_max_retries: Some(0),
                 stream_idle_timeout_ms: Some(1000),
                 requires_openai_auth: false,
+                requires_oracle_code_assist_auth: false,
             };
 
             let otel_event_manager = otel_event_manager();

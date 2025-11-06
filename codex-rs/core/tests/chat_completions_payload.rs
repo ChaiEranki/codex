@@ -59,6 +59,7 @@ async fn run_request(input: Vec<ResponseItem>) -> Value {
         stream_max_retries: Some(0),
         stream_idle_timeout_ms: Some(5_000),
         requires_openai_auth: false,
+        requires_oracle_code_assist_auth: false,
     };
 
     let codex_home = match TempDir::new() {
