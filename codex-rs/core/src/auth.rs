@@ -19,6 +19,8 @@ use codex_protocol::config_types::ForcedLoginMethod;
 pub use crate::auth::storage::AuthCredentialsStoreMode;
 pub use crate::auth::storage::AuthDotJson;
 use crate::auth::storage::AuthStorageBackend;
+pub use crate::auth::storage::CHATGPT_AUTH_MODE;
+pub use crate::auth::storage::ORACLE_CODE_ASSIST_AUTH_MODE;
 use crate::auth::storage::create_auth_storage;
 use crate::config::Config;
 use crate::default_client::CodexHttpClient;
@@ -178,6 +180,7 @@ impl CodexAuth {
                 account_id: Some("account_id".to_string()),
             }),
             last_refresh: Some(Utc::now()),
+            last_auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         };
 
         let auth_dot_json = Arc::new(Mutex::new(Some(auth_dot_json)));
@@ -242,6 +245,7 @@ pub fn login_with_api_key(
         openai_api_key: Some(api_key.to_string()),
         tokens: None,
         last_refresh: None,
+        last_auth_mode: None,
     };
     save_auth(codex_home, &auth_dot_json, auth_credentials_store_mode)
 }
@@ -394,6 +398,7 @@ fn load_auth(
         openai_api_key: auth_json_api_key,
         tokens,
         last_refresh,
+        last_auth_mode,
     } = auth_dot_json;
 
     // Prefer AuthMode.ApiKey if it's set in the auth.json.
@@ -401,14 +406,25 @@ fn load_auth(
         return Ok(Some(CodexAuth::from_api_key_with_client(api_key, client)));
     }
 
+    let mode = if tokens.is_some() {
+        match last_auth_mode.as_deref() {
+            Some(s) if s == ORACLE_CODE_ASSIST_AUTH_MODE => AuthMode::OCA,
+            Some(s) if s == CHATGPT_AUTH_MODE => AuthMode::ChatGPT,
+            _ => AuthMode::ApiKey,
+        }
+    } else {
+        AuthMode::ApiKey
+    };
+
     Ok(Some(CodexAuth {
         api_key: None,
-        mode: AuthMode::OCA,
+        mode,
         storage: storage.clone(),
         auth_dot_json: Arc::new(Mutex::new(Some(AuthDotJson {
             openai_api_key: None,
             tokens,
             last_refresh,
+            last_auth_mode,
         }))),
         client,
     }))
@@ -637,6 +653,7 @@ mod tests {
                     account_id: None,
                 }),
                 last_refresh: Some(last_refresh),
+                last_auth_mode: Some(CHATGPT_AUTH_MODE.to_string())
             },
             auth_dot_json
         );
@@ -669,6 +686,7 @@ mod tests {
             openai_api_key: Some("sk-test-key".to_string()),
             tokens: None,
             last_refresh: None,
+            last_auth_mode: None,
         };
         super::save_auth(dir.path(), &auth_dot_json, AuthCredentialsStoreMode::File)?;
         let auth_file = get_auth_file(dir.path());

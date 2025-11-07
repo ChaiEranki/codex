@@ -45,6 +45,7 @@ pub struct ServerOptions {
     pub force_state: Option<String>,
     pub forced_chatgpt_workspace_id: Option<String>,
     pub cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+    pub provider_name: String,
 }
 
 impl ServerOptions {
@@ -53,6 +54,7 @@ impl ServerOptions {
         client_id: String,
         forced_chatgpt_workspace_id: Option<String>,
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+        provider_name: String,
     ) -> Self {
         Self {
             codex_home,
@@ -65,6 +67,7 @@ impl ServerOptions {
             force_state: None,
             forced_chatgpt_workspace_id,
             cli_auth_credentials_store_mode,
+            provider_name,
         }
     }
 }
@@ -297,6 +300,7 @@ async fn process_request(
                         tokens.access_token.clone(),
                         tokens.refresh_token.clone(),
                         opts.cli_auth_credentials_store_mode,
+                        opts.provider_name.clone(),
                     )
                     .await
                     {
@@ -570,6 +574,7 @@ pub(crate) async fn persist_tokens_async(
     access_token: String,
     refresh_token: String,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
+    provider_name: String,
 ) -> io::Result<()> {
     // Reuse existing synchronous logic but run it off the async runtime.
     let codex_home = codex_home.to_path_buf();
@@ -590,6 +595,7 @@ pub(crate) async fn persist_tokens_async(
             openai_api_key: api_key,
             tokens: Some(tokens),
             last_refresh: Some(Utc::now()),
+            last_auth_mode: Some(provider_name),
         };
         save_auth(&codex_home, &auth, auth_credentials_store_mode)
     })

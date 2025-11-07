@@ -4,6 +4,7 @@ use anyhow::Context;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use codex_core::auth::AuthCredentialsStoreMode;
+use codex_core::auth::CHATGPT_AUTH_MODE;
 use codex_core::auth::load_auth_dot_json;
 use codex_login::ServerOptions;
 use codex_login::run_device_code_login;
@@ -107,6 +108,7 @@ fn server_opts(
         "client-id".to_string(),
         None,
         cli_auth_credentials_store_mode,
+        CHATGPT_AUTH_MODE.to_string(),
     );
     opts.issuer = issuer;
     opts.open_browser = false;
@@ -244,6 +246,7 @@ async fn device_code_login_integration_persists_without_api_key_on_exchange_fail
         "client-id".to_string(),
         None,
         AuthCredentialsStoreMode::File,
+        CHATGPT_AUTH_MODE.to_string(),
     );
     opts.issuer = issuer;
     opts.open_browser = false;
@@ -294,6 +297,7 @@ async fn device_code_login_integration_handles_error_payload() -> anyhow::Result
         "client-id".to_string(),
         None,
         AuthCredentialsStoreMode::File,
+        CHATGPT_AUTH_MODE.to_string(),
     );
     opts.issuer = issuer;
     opts.open_browser = false;

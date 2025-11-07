@@ -8,6 +8,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use codex_core::auth::AuthCredentialsStoreMode;
 use codex_core::auth::AuthDotJson;
+use codex_core::auth::CHATGPT_AUTH_MODE;
 use codex_core::auth::save_auth;
 use codex_core::token_data::TokenData;
 use codex_core::token_data::parse_id_token;
@@ -129,6 +130,7 @@ pub fn write_chatgpt_auth(
         openai_api_key: None,
         tokens: Some(tokens),
         last_refresh,
+        last_auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
     };
 
     save_auth(codex_home, &auth, cli_auth_credentials_store_mode).context("write auth.json")

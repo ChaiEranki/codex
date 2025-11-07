@@ -330,6 +330,8 @@ async fn run_ratatui_app(
         should_show_trust_screen,
         should_show_windows_wsl_screen,
     );
+    let should_show_oracle_code_assist_login =
+        should_show_oracle_code_assist_login(login_status, &initial_config);
 
     let config = if should_show_onboarding {
         let onboarding_result = run_onboarding_app(
@@ -368,6 +370,8 @@ async fn run_ratatui_app(
         } else {
             initial_config
         }
+    } else if should_show_oracle_code_assist_login {
+        // just start the login server and wait for response
     } else {
         initial_config
     };
@@ -476,7 +480,9 @@ pub enum LoginStatus {
 }
 
 fn get_login_status(config: &Config) -> LoginStatus {
-    if config.model_provider.requires_openai_auth {
+    if config.model_provider.requires_openai_auth
+        || config.model_provider.requires_oracle_code_assist_auth
+    {
         // Reading the OpenAI API key is an async operation because it may need
         // to refresh the token. Block on it.
         let codex_home = config.codex_home.clone();
@@ -521,6 +527,14 @@ fn should_show_trust_screen(config: &Config) -> bool {
     }
     // otherwise, skip iff the active project is trusted
     !config.active_project.is_trusted()
+}
+
+fn should_show_oracle_code_assist_login(login_status: LoginStatus, config: &Config) -> bool {
+    if !config.model_provider.requires_oracle_code_assist_auth {
+        return false;
+    }
+
+    login_status == LoginStatus::NotAuthenticated
 }
 
 fn should_show_onboarding(

@@ -2,6 +2,7 @@ use codex_app_server_protocol::AuthMode;
 use codex_common::CliConfigOverrides;
 use codex_core::CodexAuth;
 use codex_core::auth::AuthCredentialsStoreMode;
+use codex_core::auth::CHATGPT_AUTH_MODE;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::login_with_api_key;
 use codex_core::auth::logout;
@@ -25,6 +26,7 @@ pub async fn login_with_chatgpt(
         CLIENT_ID.to_string(),
         forced_chatgpt_workspace_id,
         cli_auth_credentials_store_mode,
+        CHATGPT_AUTH_MODE.to_string(),
     );
     let server = run_login_server(opts)?;
 
@@ -135,6 +137,7 @@ pub async fn run_login_with_device_code(
         client_id.unwrap_or(CLIENT_ID.to_string()),
         forced_chatgpt_workspace_id,
         config.cli_auth_credentials_store_mode,
+        CHATGPT_AUTH_MODE.to_string(),
     );
     if let Some(iss) = issuer_base_url {
         opts.issuer = iss;

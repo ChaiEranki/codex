@@ -20,6 +20,9 @@ use crate::token_data::TokenData;
 use codex_keyring_store::DefaultKeyringStore;
 use codex_keyring_store::KeyringStore;
 
+pub const CHATGPT_AUTH_MODE: &str = "ChatGPT";
+pub const ORACLE_CODE_ASSIST_AUTH_MODE: &str = "Oracle Code Assist";
+
 /// Determine where Codex should store CLI auth credentials.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -44,6 +47,9 @@ pub struct AuthDotJson {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_refresh: Option<DateTime<Utc>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_auth_mode: Option<String>,
 }
 
 pub(super) fn get_auth_file(codex_home: &Path) -> PathBuf {
@@ -298,6 +304,7 @@ mod tests {
             openai_api_key: Some("test-key".to_string()),
             tokens: None,
             last_refresh: Some(Utc::now()),
+            last_auth_mode: None,
         };
 
         storage
@@ -317,6 +324,7 @@ mod tests {
             openai_api_key: Some("test-key".to_string()),
             tokens: None,
             last_refresh: Some(Utc::now()),
+            last_auth_mode: None,
         };
 
         let file = get_auth_file(codex_home.path());
@@ -338,6 +346,7 @@ mod tests {
             openai_api_key: Some("sk-test-key".to_string()),
             tokens: None,
             last_refresh: None,
+            last_auth_mode: None,
         };
         let storage = create_auth_storage(dir.path().to_path_buf(), AuthCredentialsStoreMode::File);
         storage.save(&auth_dot_json)?;
@@ -432,6 +441,7 @@ mod tests {
                 account_id: Some(format!("{prefix}-account-id")),
             }),
             last_refresh: None,
+            last_auth_mode: None,
         }
     }
 
@@ -447,6 +457,7 @@ mod tests {
             openai_api_key: Some("sk-test".to_string()),
             tokens: None,
             last_refresh: None,
+            last_auth_mode: None,
         };
         seed_keyring_with_auth(
             &mock_keyring,
@@ -488,6 +499,7 @@ mod tests {
                 account_id: Some("account".to_string()),
             }),
             last_refresh: Some(Utc::now()),
+            last_auth_mode: None,
         };
 
         storage.save(&auth)?;

@@ -2,8 +2,10 @@
 
 use codex_core::AuthManager;
 use codex_core::auth::AuthCredentialsStoreMode;
+use codex_core::auth::CHATGPT_AUTH_MODE;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::OCA_CLIENT_ID;
+use codex_core::auth::ORACLE_CODE_ASSIST_AUTH_MODE;
 use codex_core::auth::login_with_api_key;
 use codex_core::auth::read_openai_api_key_from_env;
 use codex_login::ServerOptions;
@@ -169,6 +171,7 @@ pub(crate) struct AuthModeWidget {
 impl AuthModeWidget {
     fn is_api_login_allowed(&self) -> bool {
         !matches!(self.forced_login_method, Some(ForcedLoginMethod::Chatgpt))
+            || !matches!(self.forced_login_method, Some(ForcedLoginMethod::OCA))
     }
 
     fn is_chatgpt_login_allowed(&self) -> bool {
@@ -581,6 +584,7 @@ impl AuthModeWidget {
             CLIENT_ID.to_string(),
             self.forced_chatgpt_workspace_id.clone(),
             self.cli_auth_credentials_store_mode,
+            CHATGPT_AUTH_MODE.to_string(),
         );
         match run_login_server(opts) {
             Ok(child) => {
@@ -654,6 +658,7 @@ impl AuthModeWidget {
             force_state: None,
             forced_chatgpt_workspace_id: self.forced_chatgpt_workspace_id.clone(),
             cli_auth_credentials_store_mode: self.cli_auth_credentials_store_mode,
+            provider_name: ORACLE_CODE_ASSIST_AUTH_MODE.to_string(),
         };
         match run_login_server(opts) {
             Ok(child) => {

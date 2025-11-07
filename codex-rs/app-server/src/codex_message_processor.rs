@@ -68,6 +68,7 @@ use codex_core::InitialHistory;
 use codex_core::NewConversation;
 use codex_core::RolloutRecorder;
 use codex_core::SessionMeta;
+use codex_core::auth::CHATGPT_AUTH_MODE;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::login_with_api_key;
 use codex_core::config::Config;
@@ -373,6 +374,7 @@ impl CodexMessageProcessor {
                 CLIENT_ID.to_string(),
                 config.forced_chatgpt_workspace_id.clone(),
                 config.cli_auth_credentials_store_mode,
+                CHATGPT_AUTH_MODE.to_string(),
             )
         };
 
