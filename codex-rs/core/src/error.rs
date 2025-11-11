@@ -133,6 +133,9 @@ pub enum CodexErr {
     #[error("unsupported operation: {0}")]
     UnsupportedOperation(String),
 
+    #[error("Authentication expired. Please logout with /logout and then reopen codex-cli.")]
+    AuthenticationExpired,
+
     #[error("Fatal error: {0}")]
     Fatal(String),
 

@@ -1117,6 +1117,7 @@ dependencies = [
  "tracing-test",
  "tree-sitter",
  "tree-sitter-bash",
+ "urlencoding",
  "uuid",
  "walkdir",
  "which",

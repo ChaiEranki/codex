@@ -81,6 +81,7 @@ pub mod test_backend;
 
 use crate::onboarding::TrustDirectorySelection;
 use crate::onboarding::WSL_INSTRUCTIONS;
+use crate::onboarding::auth::perform_oca_login;
 use crate::onboarding::onboarding_screen::OnboardingScreenArgs;
 use crate::onboarding::onboarding_screen::run_onboarding_app;
 use crate::tui::Tui;
@@ -370,11 +371,25 @@ async fn run_ratatui_app(
         } else {
             initial_config
         }
-    } else if should_show_oracle_code_assist_login {
-        // just start the login server and wait for response
     } else {
         initial_config
     };
+
+    if should_show_oracle_code_assist_login
+        && let Err(e) = perform_oca_login(
+            auth_manager.clone(),
+            config.codex_home.clone(),
+            config.cli_auth_credentials_store_mode,
+            None,
+        )
+        .await
+    {
+        restore();
+        session_log::log_session_end();
+        let _ = tui.terminal.clear();
+        error!("OCA login failed: {e}");
+        std::process::exit(1);
+    }
 
     // Determine resume behavior: explicit id, then resume last, then picker.
     let resume_selection = if let Some(id_str) = cli.resume_session_id.as_deref() {

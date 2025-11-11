@@ -5,6 +5,7 @@ use codex_core::auth::AuthCredentialsStoreMode;
 use codex_core::auth::CHATGPT_AUTH_MODE;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::OCA_CLIENT_ID;
+use codex_core::auth::OCA_IDCS_URL;
 use codex_core::auth::ORACLE_CODE_ASSIST_AUTH_MODE;
 use codex_core::auth::login_with_api_key;
 use codex_core::auth::read_openai_api_key_from_env;
@@ -76,6 +77,60 @@ impl Drop for ContinueInBrowserState {
             handle.shutdown();
         }
     }
+}
+
+pub async fn perform_oca_login(
+    auth_manager: Arc<AuthManager>,
+    codex_home: PathBuf,
+    cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+    forced_chatgpt_workspace_id: Option<String>,
+) -> Result<(), anyhow::Error> {
+    let opts = ServerOptions {
+        codex_home,
+        client_id: OCA_CLIENT_ID.to_string(),
+        issuer: OCA_IDCS_URL.to_string(),
+        issuer_path_prefix: "/oauth2/v1".to_string(),
+        redirect_callback_path: "/callback".to_string(),
+        port: 8669,
+        open_browser: true,
+        force_state: None,
+        forced_chatgpt_workspace_id,
+        cli_auth_credentials_store_mode,
+        provider_name: ORACLE_CODE_ASSIST_AUTH_MODE.to_string(),
+    };
+
+    let child = run_login_server(opts)?;
+    let r = child.block_until_done().await;
+    match r {
+        Ok(()) => {
+            auth_manager.reload();
+            Ok(())
+        }
+        Err(e) => Err(anyhow::anyhow!("OCA login failed: {}", e)),
+    }
+}
+
+/// Automatically re-authenticate with Oracle Code Assist when authentication expires.
+/// This function can be called when AuthenticationExpired errors are detected.
+pub async fn perform_oca_reauthentication(
+    auth_manager: Arc<AuthManager>,
+    codex_home: PathBuf,
+    cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+    forced_chatgpt_workspace_id: Option<String>,
+) -> Result<(), anyhow::Error> {
+    tracing::info!("Performing automatic OCA reauthentication due to expired credentials");
+
+    // Force logout first to clear any stale tokens
+    let _ = auth_manager.logout();
+
+    // Then perform fresh login
+    perform_oca_login(
+        auth_manager,
+        codex_home,
+        cli_auth_credentials_store_mode,
+        forced_chatgpt_workspace_id,
+    )
+    .await
 }
 
 impl KeyboardHandler for AuthModeWidget {
@@ -626,7 +681,7 @@ impl AuthModeWidget {
         }
     }
 
-    fn start_oca_login(&mut self) {
+    pub fn start_oca_login(&mut self) {
         // If we're already authenticated with OCA, don't start a new login –
         // just proceed to the success message flow.
         if matches!(self.login_status, LoginStatus::AuthMode(AuthMode::OCA)) {
@@ -649,8 +704,7 @@ impl AuthModeWidget {
         let opts = ServerOptions {
             codex_home: self.codex_home.clone(),
             client_id: OCA_CLIENT_ID.to_string(),
-            issuer: "https://idcs-9dc693e80d9b469480d7afe00e743931.identity.oraclecloud.com"
-                .to_string(),
+            issuer: OCA_IDCS_URL.to_string(),
             issuer_path_prefix: "/oauth2/v1".to_string(),
             redirect_callback_path: "/callback".to_string(),
             port: 8669,
