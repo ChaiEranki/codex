@@ -47,7 +47,7 @@ impl PartialEq for CodexAuth {
 
 // TODO(pakrym): use token exp field to check for expiration instead
 const CHATGPT_TOKEN_REFRESH_INTERVAL_HOURS: i64 = 8 * 24;
-const OCA_TOKEN_REFRESH_INTERVAL_HOURS: i64 = 0;
+const OCA_TOKEN_REFRESH_INTERVAL_HOURS: i64 = 1;
 
 impl CodexAuth {
     pub async fn refresh_token(&self) -> Result<String, std::io::Error> {
@@ -461,31 +461,21 @@ async fn update_tokens(
     Ok(auth_dot_json)
 }
 
-fn build_oca_refresh_url(refresh_token: &str) -> String {
-    let query = vec![
-        ("grant_type".to_string(), "refresh_token".to_string()),
-        ("refresh_token".to_string(), refresh_token.to_string()),
-        ("client_id".to_string(), OCA_CLIENT_ID.to_string()),
-    ];
-    let qs = query
-        .into_iter()
-        .map(|(k, v)| format!("{k}={}", urlencoding::encode(&v)))
-        .collect::<Vec<_>>()
-        .join("&");
-
-    // Use the same issuer + issuer_path_prefix pattern as used for OCA authorization
-    format!("{OCA_IDCS_URL}/oauth2/v1?{qs}")
-}
-
 async fn try_oca_refresh_token(
     refresh_token: String,
     client: &CodexHttpClient,
 ) -> std::io::Result<RefreshResponse> {
-    let refresh_url = build_oca_refresh_url(&refresh_token);
+    let refresh_url = format!("{OCA_IDCS_URL}/oauth2/v1/token");
+
+    let form_data = OcaRefreshForm {
+        grant_type: "refresh_token".to_string(),
+        refresh_token,
+        client_id: OCA_CLIENT_ID.to_string(),
+    };
 
     let response = client
         .post(refresh_url)
-        .header("Content-Type", "application/x-www-form-urlencoded")
+        .form(&form_data)
         .send()
         .await
         .map_err(std::io::Error::other)?;
@@ -496,17 +486,17 @@ async fn try_oca_refresh_token(
             .await
             .map_err(std::io::Error::other)?;
         Ok(refresh_response)
-    } else if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+    } else if response.status() == reqwest::StatusCode::UNAUTHORIZED
+        || response.status() == reqwest::StatusCode::BAD_REQUEST
+    {
         // Return specific authentication expired error for 401 responses
         // This allows the TUI layer to detect and trigger reauthentication
-        let error = try_parse_error_message(&response.text().await.unwrap_or_default());
-
         Err(std::io::Error::other(
             crate::error::CodexErr::AuthenticationExpired,
         ))
     } else {
         Err(std::io::Error::other(format!(
-            "Failed to refresh OCA token: {}: {}",
+            "Failed to refresh token: {}: {}",
             response.status(),
             try_parse_error_message(&response.text().await.unwrap_or_default()),
         )))
@@ -518,7 +508,7 @@ async fn try_refresh_token(
     refresh_token: String,
     client: &CodexHttpClient,
 ) -> std::io::Result<RefreshResponse> {
-    match (mode) {
+    match mode {
         AuthMode::ChatGPT => try_chatgpt_refresh_token(refresh_token, client).await,
         AuthMode::OCA => try_oca_refresh_token(refresh_token, client).await,
         AuthMode::ApiKey => Err(std::io::Error::other("Trying to refresh API Key")),
@@ -573,6 +563,13 @@ struct RefreshResponse {
     id_token: Option<String>,
     access_token: Option<String>,
     refresh_token: Option<String>,
+}
+
+#[derive(Serialize)]
+struct OcaRefreshForm {
+    grant_type: String,
+    refresh_token: String,
+    client_id: String,
 }
 
 // Shared constant for token refresh (client id used for oauth token refresh flow)

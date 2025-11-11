@@ -113,6 +113,13 @@ impl CodexRequestBuilder {
         self.map(|builder| builder.json(value))
     }
 
+    pub fn form<T>(self, form: &T) -> Self
+    where
+        T: Serialize,
+    {
+        self.map(|builder| builder.form(form))
+    }
+
     pub async fn send(self) -> Result<Response, reqwest::Error> {
         match self.builder.send().await {
             Ok(response) => {
