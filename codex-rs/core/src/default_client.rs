@@ -8,6 +8,8 @@ use reqwest::header::HeaderValue;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -133,6 +135,9 @@ impl CodexRequestBuilder {
                     "Request completed"
                 );
 
+                // Write request IDs to user-accessible file for troubleshooting
+                Self::write_request_ids_to_file(&request_ids, &self.method, &self.url).ok();
+
                 Ok(response)
             }
             Err(error) => {
@@ -150,15 +155,54 @@ impl CodexRequestBuilder {
     }
 
     fn extract_request_ids(response: &Response) -> HashMap<String, String> {
-        ["cf-ray", "x-request-id", "x-oai-request-id"]
-            .iter()
-            .filter_map(|&name| {
-                let header_name = HeaderName::from_static(name);
-                let value = response.headers().get(header_name)?;
-                let value = value.to_str().ok()?.to_owned();
-                Some((name.to_owned(), value))
-            })
-            .collect()
+        [
+            "cf-ray",
+            "x-request-id",
+            "x-oai-request-id",
+            "opc-request-id",
+        ]
+        .iter()
+        .filter_map(|&name| {
+            let header_name = HeaderName::from_static(name);
+            let value = response.headers().get(header_name)?;
+            let value = value.to_str().ok()?.to_owned();
+            Some((name.to_owned(), value))
+        })
+        .collect()
+    }
+
+    fn write_request_ids_to_file(
+        request_ids: &HashMap<String, String>,
+        method: &Method,
+        url: &str,
+    ) -> std::io::Result<()> {
+        // Skip if no request IDs were found
+        if request_ids.is_empty() {
+            return Ok(());
+        }
+
+        // Get codex home directory
+        let codex_home = crate::config::find_codex_home()?;
+        let mut request_ids_file = codex_home;
+        request_ids_file.push("request_ids.txt");
+
+        // Create or append to the file
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&request_ids_file)?;
+
+        // Write a timestamped entry
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        writeln!(file, "[{}] {} {}", timestamp, method, url)?;
+
+        // Write each request ID
+        for (header_name, request_id) in request_ids {
+            writeln!(file, "  {}: {}", header_name, request_id)?;
+        }
+
+        writeln!(file)?; // Empty line for readability
+        Ok(())
     }
 }
 #[derive(Debug, Clone)]
