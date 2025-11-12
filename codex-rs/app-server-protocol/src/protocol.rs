@@ -436,7 +436,7 @@ pub struct Model {
     pub display_name: String,
     pub description: String,
     pub supported_reasoning_efforts: Vec<ReasoningEffortOption>,
-    pub default_reasoning_effort: ReasoningEffort,
+    pub default_reasoning_effort: Option<ReasoningEffort>,
     // Only one model should be marked as default.
     pub is_default: bool,
 }

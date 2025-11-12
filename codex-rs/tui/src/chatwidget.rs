@@ -1102,7 +1102,7 @@ impl ChatWidget {
                 .map_or(0, |c| c.desired_height(width) + 1)
     }
 
-    pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) {
+    pub(crate) async fn handle_key_event(&mut self, key_event: KeyEvent) {
         match key_event {
             KeyEvent {
                 code: KeyCode::Char(c),
@@ -1160,7 +1160,7 @@ impl ChatWidget {
                         }
                     }
                     InputResult::Command(cmd) => {
-                        self.dispatch_command(cmd);
+                        self.dispatch_command(cmd).await;
                     }
                     InputResult::None => {}
                 }
@@ -1183,7 +1183,7 @@ impl ChatWidget {
         self.request_redraw();
     }
 
-    fn dispatch_command(&mut self, cmd: SlashCommand) {
+    async fn dispatch_command(&mut self, cmd: SlashCommand) {
         if !cmd.available_during_task() && self.bottom_pane.is_task_running() {
             let message = format!(
                 "'/{}' is disabled while a task is in progress.",
@@ -1224,7 +1224,7 @@ impl ChatWidget {
                 self.open_review_popup();
             }
             SlashCommand::Model => {
-                self.open_model_popup();
+                self.open_model_popup().await;
             }
             SlashCommand::Approvals => {
                 self.open_approvals_popup();
@@ -1661,10 +1661,19 @@ impl ChatWidget {
 
     /// Open a popup to choose the model (stage 1). After selecting a model,
     /// a second popup is shown to choose the reasoning effort.
-    pub(crate) fn open_model_popup(&mut self) {
+    pub(crate) async fn open_model_popup(&mut self) {
         let current_model = self.config.model.clone();
         let auth_mode = self.auth_manager.auth().map(|auth| auth.mode);
-        let presets: Vec<ModelPreset> = builtin_model_presets(auth_mode);
+        let base_url = self.config.model_provider.base_url.as_deref();
+        let access_token = if let Some(auth) = self.auth_manager.auth() {
+            (auth.get_token().await).ok()
+        } else {
+            None
+        };
+        let presets: Vec<ModelPreset> =
+            builtin_model_presets(auth_mode, base_url, access_token.as_deref())
+                .await
+                .unwrap_or_default();
 
         let mut items: Vec<SelectionItem> = Vec::new();
         for preset in presets.into_iter() {
@@ -1675,17 +1684,43 @@ impl ChatWidget {
             };
             let is_current = preset.model == current_model;
             let preset_for_action = preset;
-            let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
-                tx.send(AppEvent::OpenReasoningPopup {
-                    model: preset_for_action,
-                });
-            })];
+            let model_for_action = preset.model.to_string();
+
+            let actions: Vec<SelectionAction> = match preset.supported_reasoning_efforts.len() {
+                0 => {
+                    vec![Box::new(move |tx| {
+                        tx.send(AppEvent::CodexOp(Op::OverrideTurnContext {
+                            cwd: None,
+                            approval_policy: None,
+                            sandbox_policy: None,
+                            model: Some(model_for_action.clone()),
+                            effort: None,
+                            summary: None,
+                        }));
+                        tx.send(AppEvent::UpdateModel(model_for_action.clone()));
+                        tx.send(AppEvent::UpdateReasoningEffort(None));
+                        tx.send(AppEvent::PersistModelSelection {
+                            model: model_for_action.clone(),
+                            effort: None,
+                        });
+                        tracing::info!("Selected model: {}", model_for_action,);
+                    })]
+                }
+                _ => {
+                    vec![Box::new(move |tx| {
+                        tx.send(AppEvent::OpenReasoningPopup {
+                            model: preset_for_action,
+                        });
+                    })]
+                }
+            };
+
             items.push(SelectionItem {
                 name: preset.display_name.to_string(),
                 description,
                 is_current,
                 actions,
-                dismiss_on_select: false,
+                dismiss_on_select: preset.supported_reasoning_efforts.is_empty(),
                 ..Default::default()
             });
         }
@@ -1701,7 +1736,8 @@ impl ChatWidget {
 
     /// Open a popup to choose the reasoning effort (stage 2) for the given model.
     pub(crate) fn open_reasoning_popup(&mut self, preset: ModelPreset) {
-        let default_effort: ReasoningEffortConfig = preset.default_reasoning_effort;
+        let default_effort: ReasoningEffortConfig =
+            preset.default_reasoning_effort.unwrap_or_default();
         let supported = preset.supported_reasoning_efforts;
 
         struct EffortChoice {

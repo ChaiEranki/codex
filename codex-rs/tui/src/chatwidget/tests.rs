@@ -5,6 +5,7 @@ use crate::test_backend::VT100Backend;
 use crate::tui::FrameRequester;
 use assert_matches::assert_matches;
 use codex_common::approval_presets::builtin_approval_presets;
+use codex_common::model_presets::builtin_model_presets_sync;
 use codex_core::AuthManager;
 use codex_core::CodexAuth;
 use codex_core::config::Config;
@@ -392,8 +393,8 @@ fn test_rate_limit_warnings_monthly() {
 
 // (removed experimental resize snapshot test)
 
-#[test]
-fn exec_approval_emits_proposed_command_and_decision_history() {
+#[tokio::test]
+async fn exec_approval_emits_proposed_command_and_decision_history() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
 
     // Trigger an exec approval request with a short, single-line command
@@ -425,7 +426,8 @@ fn exec_approval_emits_proposed_command_and_decision_history() {
     assert_snapshot!("exec_approval_modal_exec", format!("{buf:?}"));
 
     // Approve via keyboard and verify a concise decision history line is added
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE))
+        .await;
     let decision = drain_insert_history(&mut rx)
         .pop()
         .expect("expected decision cell in history");
@@ -435,8 +437,8 @@ fn exec_approval_emits_proposed_command_and_decision_history() {
     );
 }
 
-#[test]
-fn exec_approval_decision_truncates_multiline_and_long_commands() {
+#[tokio::test]
+async fn exec_approval_decision_truncates_multiline_and_long_commands() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
 
     // Multiline command: modal should show full command, history records decision only
@@ -480,7 +482,8 @@ fn exec_approval_decision_truncates_multiline_and_long_commands() {
     );
 
     // Deny via keyboard; decision snippet should be single-line and elided with " ..."
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE))
+        .await;
     let aborted_multi = drain_insert_history(&mut rx)
         .pop()
         .expect("expected aborted decision cell (multiline)");
@@ -508,7 +511,8 @@ fn exec_approval_decision_truncates_multiline_and_long_commands() {
         proposed_long.is_empty(),
         "expected long approval request to avoid emitting history cells before decision"
     );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE))
+        .await;
     let aborted_long = drain_insert_history(&mut rx)
         .pop()
         .expect("expected aborted decision cell (long)");
@@ -589,22 +593,23 @@ fn open_fixture(name: &str) -> File {
     File::open(name).expect("open fixture file")
 }
 
-#[test]
-fn empty_enter_during_task_does_not_queue() {
+#[tokio::test]
+async fn empty_enter_during_task_does_not_queue() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual();
 
     // Simulate running task so submissions would normally be queued.
     chat.bottom_pane.set_task_running(true);
 
     // Press Enter with an empty composer.
-    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+        .await;
 
     // Ensure nothing was queued.
     assert!(chat.queued_user_messages.is_empty());
 }
 
-#[test]
-fn alt_up_edits_most_recent_queued_message() {
+#[tokio::test]
+async fn alt_up_edits_most_recent_queued_message() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual();
 
     // Simulate a running task so messages would normally be queued.
@@ -618,7 +623,8 @@ fn alt_up_edits_most_recent_queued_message() {
     chat.refresh_queued_user_messages();
 
     // Press Alt+Up to edit the most recent (last) queued message.
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT))
+        .await;
 
     // Composer should now contain the last queued message.
     assert_eq!(
@@ -636,24 +642,27 @@ fn alt_up_edits_most_recent_queued_message() {
 /// Pressing Up to recall the most recent history entry and immediately queuing
 /// it while a task is running should always enqueue the same text, even when it
 /// is queued repeatedly.
-#[test]
-fn enqueueing_history_prompt_multiple_times_is_stable() {
+#[tokio::test]
+async fn enqueueing_history_prompt_multiple_times_is_stable() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual();
 
     // Submit an initial prompt to seed history.
     chat.bottom_pane.set_composer_text("repeat me".to_string());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+        .await;
 
     // Simulate an active task so further submissions are queued.
     chat.bottom_pane.set_task_running(true);
 
     for _ in 0..3 {
         // Recall the prompt from history and ensure it is what we expect.
-        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+            .await;
         assert_eq!(chat.bottom_pane.composer_text(), "repeat me");
 
         // Queue the prompt while the task is running.
-        chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .await;
     }
 
     assert_eq!(chat.queued_user_messages.len(), 3);
@@ -662,8 +671,8 @@ fn enqueueing_history_prompt_multiple_times_is_stable() {
     }
 }
 
-#[test]
-fn streaming_final_answer_keeps_task_running_state() {
+#[tokio::test]
+async fn streaming_final_answer_keeps_task_running_state() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual();
 
     chat.on_task_started();
@@ -675,7 +684,8 @@ fn streaming_final_answer_keeps_task_running_state() {
 
     chat.bottom_pane
         .set_composer_text("queued submission".to_string());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+        .await;
 
     assert_eq!(chat.queued_user_messages.len(), 1);
     assert_eq!(
@@ -684,7 +694,8 @@ fn streaming_final_answer_keeps_task_running_state() {
     );
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL))
+        .await;
     match op_rx.try_recv() {
         Ok(Op::Interrupt) => {}
         other => panic!("expected Op::Interrupt, got {other:?}"),
@@ -692,11 +703,12 @@ fn streaming_final_answer_keeps_task_running_state() {
     assert!(chat.bottom_pane.ctrl_c_quit_hint_visible());
 }
 
-#[test]
-fn ctrl_c_shutdown_ignores_caps_lock() {
+#[tokio::test]
+async fn ctrl_c_shutdown_ignores_caps_lock() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual();
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::CONTROL));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::CONTROL))
+        .await;
 
     match op_rx.try_recv() {
         Ok(Op::Shutdown) => {}
@@ -704,8 +716,8 @@ fn ctrl_c_shutdown_ignores_caps_lock() {
     }
 }
 
-#[test]
-fn ctrl_c_cleared_prompt_is_recoverable_via_history() {
+#[tokio::test]
+async fn ctrl_c_cleared_prompt_is_recoverable_via_history() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual();
 
     chat.bottom_pane.insert_str("draft message ");
@@ -717,12 +729,14 @@ fn ctrl_c_cleared_prompt_is_recoverable_via_history() {
         "expected placeholder {placeholder:?} in composer text"
     );
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL))
+        .await;
     assert!(chat.bottom_pane.composer_text().is_empty());
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
     assert!(chat.bottom_pane.ctrl_c_quit_hint_visible());
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+        .await;
     let restored_text = chat.bottom_pane.composer_text();
     assert!(
         restored_text.ends_with(placeholder),
@@ -794,19 +808,23 @@ fn exec_history_cell_shows_working_then_failed() {
 
 /// Selecting the custom prompt option from the review popup sends
 /// OpenReviewCustomPrompt to the app event channel.
-#[test]
-fn review_popup_custom_prompt_action_sends_event() {
+#[tokio::test]
+async fn review_popup_custom_prompt_action_sends_event() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
 
     // Open the preset selection popup
     chat.open_review_popup();
 
     // Move selection down to the fourth item: "Custom review instructions"
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
-    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+        .await;
+    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+        .await;
+    chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+        .await;
     // Activate
-    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+        .await;
 
     // Drain events and ensure we saw the OpenReviewCustomPrompt request
     let mut found = false;
@@ -819,15 +837,15 @@ fn review_popup_custom_prompt_action_sends_event() {
     assert!(found, "expected OpenReviewCustomPrompt event to be sent");
 }
 
-#[test]
-fn slash_init_skips_when_project_doc_exists() {
+#[tokio::test]
+async fn slash_init_skips_when_project_doc_exists() {
     let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual();
     let tempdir = tempdir().unwrap();
     let existing_path = tempdir.path().join(DEFAULT_PROJECT_DOC_FILENAME);
     std::fs::write(&existing_path, "existing instructions").unwrap();
     chat.config.cwd = tempdir.path().to_path_buf();
 
-    chat.dispatch_command(SlashCommand::Init);
+    chat.dispatch_command(SlashCommand::Init).await;
 
     match op_rx.try_recv() {
         Err(TryRecvError::Empty) => {}
@@ -851,11 +869,11 @@ fn slash_init_skips_when_project_doc_exists() {
     );
 }
 
-#[test]
-fn slash_undo_sends_op() {
+#[tokio::test]
+async fn slash_undo_sends_op() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
 
-    chat.dispatch_command(SlashCommand::Undo);
+    chat.dispatch_command(SlashCommand::Undo).await;
 
     match rx.try_recv() {
         Ok(AppEvent::CodexOp(Op::Undo)) => {}
@@ -1017,14 +1035,15 @@ fn review_commit_picker_shows_subjects_without_timestamps() {
 
 /// Submitting the custom prompt view sends Op::Review with the typed prompt
 /// and uses the same text for the user-facing hint.
-#[test]
-fn custom_prompt_submit_sends_review_op() {
+#[tokio::test]
+async fn custom_prompt_submit_sends_review_op() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
 
     chat.show_review_custom_prompt();
     // Paste prompt text via ChatWidget handler, then submit
     chat.handle_paste("  please audit dependencies  ".to_string());
-    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+        .await;
 
     // Expect AppEvent::CodexOp(Op::Review { .. }) with trimmed prompt
     let evt = rx.try_recv().expect("expected one app event");
@@ -1044,13 +1063,14 @@ fn custom_prompt_submit_sends_review_op() {
 }
 
 /// Hitting Enter on an empty custom prompt view does not submit.
-#[test]
-fn custom_prompt_enter_empty_does_not_send() {
+#[tokio::test]
+async fn custom_prompt_enter_empty_does_not_send() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
 
     chat.show_review_custom_prompt();
     // Enter without any text
-    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+        .await;
 
     // No AppEvent::CodexOp should be sent
     assert!(rx.try_recv().is_err(), "no app event should be sent");
@@ -1137,8 +1157,8 @@ fn interrupted_turn_error_message_snapshot() {
 
 /// Opening custom prompt from the review popup, pressing Esc returns to the
 /// parent popup, pressing Esc again dismisses all panels (back to normal mode).
-#[test]
-fn review_custom_prompt_escape_navigates_back_then_dismisses() {
+#[tokio::test]
+async fn review_custom_prompt_escape_navigates_back_then_dismisses() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual();
 
     // Open the Review presets parent popup.
@@ -1155,7 +1175,8 @@ fn review_custom_prompt_escape_navigates_back_then_dismisses() {
     );
 
     // Esc once: child view closes, parent (review presets) remains.
-    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+        .await;
     let header = render_bottom_first_row(&chat, 60);
     assert!(
         header.contains("Select a review preset"),
@@ -1163,7 +1184,8 @@ fn review_custom_prompt_escape_navigates_back_then_dismisses() {
     );
 
     // Esc again: parent closes; back to normal composer state.
-    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+        .await;
     assert!(
         chat.is_normal_backtrack_mode(),
         "expected to be back in normal composer mode"
@@ -1191,7 +1213,8 @@ async fn review_branch_picker_escape_navigates_back_then_dismisses() {
     );
 
     // Esc once: child view closes, parent remains.
-    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+        .await;
     let header = render_bottom_first_row(&chat, 60);
     assert!(
         header.contains("Select a review preset"),
@@ -1199,7 +1222,8 @@ async fn review_branch_picker_escape_navigates_back_then_dismisses() {
     );
 
     // Esc again: parent closes; back to normal composer state.
-    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+        .await;
     assert!(
         chat.is_normal_backtrack_mode(),
         "expected to be back in normal composer mode"
@@ -1259,12 +1283,12 @@ fn render_bottom_popup(chat: &ChatWidget, width: u16) -> String {
     lines.join("\n")
 }
 
-#[test]
-fn model_selection_popup_snapshot() {
+#[tokio::test]
+async fn model_selection_popup_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual();
 
     chat.config.model = "gpt-5-codex".to_string();
-    chat.open_model_popup();
+    chat.open_model_popup().await;
 
     let popup = render_bottom_popup(&chat, 80);
     assert_snapshot!("model_selection_popup", popup);
@@ -1343,7 +1367,7 @@ fn model_reasoning_selection_popup_snapshot() {
     chat.config.model = "gpt-5-codex".to_string();
     chat.config.model_reasoning_effort = Some(ReasoningEffortConfig::High);
 
-    let preset = builtin_model_presets(None)
+    let preset = builtin_model_presets_sync(None)
         .into_iter()
         .find(|preset| preset.model == "gpt-5-codex")
         .expect("gpt-5-codex preset");
@@ -1353,12 +1377,12 @@ fn model_reasoning_selection_popup_snapshot() {
     assert_snapshot!("model_reasoning_selection_popup", popup);
 }
 
-#[test]
-fn feedback_selection_popup_snapshot() {
+#[tokio::test]
+async fn feedback_selection_popup_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual();
 
     // Open the feedback category selection popup via slash command.
-    chat.dispatch_command(SlashCommand::Feedback);
+    chat.dispatch_command(SlashCommand::Feedback).await;
 
     let popup = render_bottom_popup(&chat, 80);
     assert_snapshot!("feedback_selection_popup", popup);
@@ -1375,14 +1399,14 @@ fn feedback_upload_consent_popup_snapshot() {
     assert_snapshot!("feedback_upload_consent_popup", popup);
 }
 
-#[test]
-fn reasoning_popup_escape_returns_to_model_popup() {
+#[tokio::test]
+async fn reasoning_popup_escape_returns_to_model_popup() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual();
 
     chat.config.model = "gpt-5".to_string();
-    chat.open_model_popup();
+    chat.open_model_popup().await;
 
-    let presets = builtin_model_presets(None)
+    let presets = builtin_model_presets_sync(None)
         .into_iter()
         .find(|preset| preset.model == "gpt-5-codex")
         .expect("gpt-5-codex preset");
@@ -1391,7 +1415,8 @@ fn reasoning_popup_escape_returns_to_model_popup() {
     let before_escape = render_bottom_popup(&chat, 80);
     assert!(before_escape.contains("Select Reasoning Level"));
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+        .await;
 
     let after_escape = render_bottom_popup(&chat, 80);
     assert!(after_escape.contains("Select Model and Effort"));
@@ -1429,14 +1454,14 @@ fn exec_history_extends_previous_when_consecutive() {
     assert_snapshot!("exploring_step6_finish_cat_bar", active_blob(&chat));
 }
 
-#[test]
-fn disabled_slash_command_while_task_running_snapshot() {
+#[tokio::test]
+async fn disabled_slash_command_while_task_running_snapshot() {
     // Build a chat widget and simulate an active task
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
     chat.bottom_pane.set_task_running(true);
 
     // Dispatch a command that is unavailable while a task runs (e.g., /model)
-    chat.dispatch_command(SlashCommand::Model);
+    chat.dispatch_command(SlashCommand::Model).await;
 
     // Drain history and snapshot the rendered error line(s)
     let cells = drain_insert_history(&mut rx);
@@ -2113,8 +2138,8 @@ fn apply_patch_manual_flow_snapshot() {
     );
 }
 
-#[test]
-fn apply_patch_approval_sends_op_with_submission_id() {
+#[tokio::test]
+async fn apply_patch_approval_sends_op_with_submission_id() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
     // Simulate receiving an approval request with a distinct submission id and call id
     let mut changes = HashMap::new();
@@ -2136,7 +2161,8 @@ fn apply_patch_approval_sends_op_with_submission_id() {
     });
 
     // Approve via key press 'y'
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE))
+        .await;
 
     // Expect a CodexOp with PatchApproval carrying the submission id, not call id
     let mut found = false;
@@ -2151,8 +2177,8 @@ fn apply_patch_approval_sends_op_with_submission_id() {
     assert!(found, "expected PatchApproval op to be sent");
 }
 
-#[test]
-fn apply_patch_full_flow_integration_like() {
+#[tokio::test]
+async fn apply_patch_full_flow_integration_like() {
     let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual();
 
     // 1) Backend requests approval
@@ -2172,7 +2198,8 @@ fn apply_patch_full_flow_integration_like() {
     });
 
     // 2) User approves via 'y' and App receives a CodexOp
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE))
+        .await;
     let mut maybe_op: Option<Op> = None;
     while let Ok(app_ev) = rx.try_recv() {
         if let AppEvent::CodexOp(op) = app_ev {

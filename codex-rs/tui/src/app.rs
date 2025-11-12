@@ -508,7 +508,7 @@ impl App {
                 {
                     self.handle_backtrack_esc_key(tui);
                 } else {
-                    self.chat_widget.handle_key_event(key_event);
+                    self.chat_widget.handle_key_event(key_event).await;
                 }
             }
             // Enter confirms backtrack when primed + count > 0. Otherwise pass to widget.
@@ -533,7 +533,7 @@ impl App {
                 if key_event.code != KeyCode::Esc && self.backtrack.primed {
                     self.reset_backtrack_state();
                 }
-                self.chat_widget.handle_key_event(key_event);
+                self.chat_widget.handle_key_event(key_event).await;
             }
             _ => {
                 // Ignore Release key events.

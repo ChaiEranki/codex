@@ -62,7 +62,7 @@ async fn list_models_returns_all_models_with_large_limit() -> Result<()> {
                         .to_string(),
                 },
             ],
-            default_reasoning_effort: ReasoningEffort::Medium,
+            default_reasoning_effort: Some(ReasoningEffort::Medium),
             is_default: true,
         },
         Model {
@@ -93,7 +93,7 @@ async fn list_models_returns_all_models_with_large_limit() -> Result<()> {
                         .to_string(),
                 },
             ],
-            default_reasoning_effort: ReasoningEffort::Medium,
+            default_reasoning_effort: Some(ReasoningEffort::Medium),
             is_default: false,
         },
     ];
