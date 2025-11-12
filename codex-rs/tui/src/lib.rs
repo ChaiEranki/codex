@@ -334,6 +334,20 @@ async fn run_ratatui_app(
     let should_show_oracle_code_assist_login =
         should_show_oracle_code_assist_login(login_status, &initial_config);
 
+    if initial_config.model_provider.requires_openai_auth
+        && initial_config
+            .model_provider
+            .requires_oracle_code_assist_auth
+    {
+        restore();
+        session_log::log_session_end();
+        let _ = tui.terminal.clear();
+        error!(
+            "Can't have both requires_openai_auth and requires_oracle_code_assist_auth selected"
+        );
+        std::process::exit(1);
+    }
+
     let config = if should_show_onboarding {
         let onboarding_result = run_onboarding_app(
             OnboardingScreenArgs {
