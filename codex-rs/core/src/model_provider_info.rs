@@ -317,6 +317,37 @@ pub fn built_in_model_providers() -> HashMap<String, ModelProviderInfo> {
                 requires_oracle_code_assist_auth: false,
             },
         ),
+        (
+            "oca",
+            P {
+                name: "Oracle Code Assist (oca)".into(),
+                // Allow users to override the default OCA endpoint by
+                // exporting `CODEX_CLI_OCA_BASE_URL`. This is useful when pointing
+                // Codex at a proxy, mock server, or different deployment
+                // without requiring a full TOML override for the built-in
+                // OCA provider.
+                base_url: std::env::var("CODEX_CLI_OCA_BASE_URL")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+                    .or_else(|| Some("https://code-internal.aiservice.us-chicago-1.oci.oraclecloud.com/20250206/app/litellm".to_string())),
+                env_key: None,
+                env_key_instructions: None,
+                experimental_bearer_token: None,
+                wire_api: WireApi::Chat,
+                query_params: None,
+                http_headers: Some(
+                    [("client".to_string(), "codex-cli".to_string()), ("client-version".to_string(), "1".to_string())]
+                        .into_iter()
+                        .collect(),
+                ),
+                env_http_headers: None,
+                request_max_retries: None,
+                stream_max_retries: None,
+                stream_idle_timeout_ms: None,
+                requires_openai_auth: false,
+                requires_oracle_code_assist_auth: true,
+            },
+        ),
         (BUILT_IN_OSS_MODEL_PROVIDER_ID, create_oss_provider()),
     ]
     .into_iter()

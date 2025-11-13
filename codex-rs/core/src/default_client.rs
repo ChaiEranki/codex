@@ -194,11 +194,11 @@ impl CodexRequestBuilder {
 
         // Write a timestamped entry
         let timestamp = chrono::Utc::now().to_rfc3339();
-        writeln!(file, "[{}] {} {}", timestamp, method, url)?;
+        writeln!(file, "[{timestamp}] {method} {url}")?;
 
         // Write each request ID
         for (header_name, request_id) in request_ids {
-            writeln!(file, "  {}: {}", header_name, request_id)?;
+            writeln!(file, "  {header_name}: {request_id}")?;
         }
 
         writeln!(file)?; // Empty line for readability
