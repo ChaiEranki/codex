@@ -267,11 +267,12 @@ const DEFAULT_OLLAMA_PORT: u32 = 11434;
 
 pub const BUILT_IN_OSS_MODEL_PROVIDER_ID: &str = "oss";
 pub const BUILT_IN_OCA_MODEL_PROVIDER_ID: &str = "oca";
+pub const BUILT_IN_OCA_RESPONSES_MODEL_PROVIDER_ID: &str = "oca-responses";
 
 pub const OCA_DEFAULT_BASE_URL: &str =
     "https://code-internal.aiservice.us-chicago-1.oci.oraclecloud.com/20250206/app/litellm";
 
-pub fn create_oca_provider() -> ModelProviderInfo {
+pub fn create_oca_provider(wire_api: WireApi) -> ModelProviderInfo {
     ModelProviderInfo {
         name: "Oracle Code Assist (oca)".into(),
         // Allow users to override the default OCA endpoint by
@@ -286,7 +287,7 @@ pub fn create_oca_provider() -> ModelProviderInfo {
         env_key: None,
         env_key_instructions: None,
         experimental_bearer_token: None,
-        wire_api: WireApi::Chat,
+        wire_api,
         query_params: None,
         http_headers: Some(
             [
@@ -355,7 +356,14 @@ pub fn built_in_model_providers() -> HashMap<String, ModelProviderInfo> {
                 requires_oracle_code_assist_auth: false,
             },
         ),
-        (BUILT_IN_OCA_MODEL_PROVIDER_ID, create_oca_provider()),
+        (
+            BUILT_IN_OCA_MODEL_PROVIDER_ID,
+            create_oca_provider(WireApi::Chat),
+        ),
+        (
+            BUILT_IN_OCA_RESPONSES_MODEL_PROVIDER_ID,
+            create_oca_provider(WireApi::Responses),
+        ),
         (BUILT_IN_OSS_MODEL_PROVIDER_ID, create_oss_provider()),
     ]
     .into_iter()

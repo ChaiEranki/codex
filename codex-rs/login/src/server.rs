@@ -556,10 +556,6 @@ pub(crate) async fn exchange_code_for_tokens(
     }
 
     let tokens: TokenResponse = resp.json().await.map_err(io::Error::other)?;
-    eprintln!(
-        "id_token: {}, access_token: {}, refresh_token: {}",
-        tokens.id_token, tokens.access_token, tokens.refresh_token
-    );
     Ok(ExchangedTokens {
         id_token: tokens.id_token,
         access_token: tokens.access_token,

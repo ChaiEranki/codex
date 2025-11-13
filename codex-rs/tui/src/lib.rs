@@ -15,7 +15,10 @@ use codex_core::RolloutRecorder;
 use codex_core::auth::enforce_login_restrictions;
 use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
+use codex_core::config_edit::ConfigEditsBuilder;
 use codex_core::find_conversation_path_by_id_str;
+use codex_core::model_family::derive_default_model_family;
+use codex_core::model_family::find_family_for_model;
 use codex_core::protocol::AskForApproval;
 use codex_ollama::DEFAULT_OSS_MODEL;
 use codex_protocol::config_types::SandboxMode;
@@ -269,6 +272,54 @@ pub async fn run_main(
     .map_err(|err| std::io::Error::other(err.to_string()))
 }
 
+async fn confirm_oca_model(config: &mut Config) {
+    if !config.model_provider.requires_oracle_code_assist_auth {
+        return;
+    }
+
+    if let Ok(Some(auth)) =
+        CodexAuth::from_auth_storage(&config.codex_home, config.cli_auth_credentials_store_mode)
+    {
+        match codex_common::model_presets::fetch_oracle_code_assist_models(
+            config
+                .model_provider
+                .base_url
+                .clone()
+                .unwrap_or_default()
+                .as_ref(),
+            &auth.get_token().await.unwrap_or_default(),
+        )
+        .await
+        {
+            Ok(models) => {
+                if !models.iter().any(|m| m.model == config.model) && !models.is_empty() {
+                    let new_model = models[0].model.to_string();
+                    tracing::info!(
+                        "Model {} not supported by OCA, switching to {}",
+                        config.model,
+                        new_model
+                    );
+                    if let Err(e) = ConfigEditsBuilder::new(&config.codex_home)
+                        .set_model(Some(&new_model), None)
+                        .apply()
+                        .await
+                    {
+                        tracing::error!("Failed to update config with new model: {e}");
+                    } else {
+                        let model_family = find_family_for_model(&new_model)
+                            .unwrap_or_else(|| derive_default_model_family(&new_model));
+                        config.model_family = model_family;
+                        config.model = new_model;
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch OCA models: {e}");
+            }
+        }
+    }
+}
+
 async fn run_ratatui_app(
     cli: Cli,
     initial_config: Config,
@@ -348,7 +399,7 @@ async fn run_ratatui_app(
         std::process::exit(1);
     }
 
-    let config = if should_show_onboarding {
+    let mut config = if should_show_onboarding {
         let onboarding_result = run_onboarding_app(
             OnboardingScreenArgs {
                 show_login_screen: should_show_login_screen(login_status, &initial_config),
@@ -404,6 +455,9 @@ async fn run_ratatui_app(
         error!("OCA login failed: {e}");
         std::process::exit(1);
     }
+
+    // uncomment this if you want to check if the user actually has access to models they are requesting
+    // confirm_oca_model(&mut config).await;
 
     // Determine resume behavior: explicit id, then resume last, then picker.
     let resume_selection = if let Some(id_str) = cli.resume_session_id.as_deref() {
@@ -562,10 +616,7 @@ fn should_show_oracle_code_assist_login(login_status: LoginStatus, config: &Conf
     if !config.model_provider.requires_oracle_code_assist_auth {
         return false;
     }
-    match login_status {
-        LoginStatus::AuthMode(AuthMode::OCA) => false,
-        _ => true,
-    }
+    !matches!(login_status, LoginStatus::AuthMode(AuthMode::OCA))
 }
 
 fn should_show_onboarding(
