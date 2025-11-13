@@ -562,8 +562,10 @@ fn should_show_oracle_code_assist_login(login_status: LoginStatus, config: &Conf
     if !config.model_provider.requires_oracle_code_assist_auth {
         return false;
     }
-
-    login_status == LoginStatus::NotAuthenticated
+    match login_status {
+        LoginStatus::AuthMode(AuthMode::OCA) => false,
+        _ => true,
+    }
 }
 
 fn should_show_onboarding(
