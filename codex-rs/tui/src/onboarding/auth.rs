@@ -156,11 +156,6 @@ impl KeyboardHandler for AuthModeWidget {
                 }
             }
             KeyCode::Char('2') => {
-                if self.is_oca_login_allowed() {
-                    self.start_oca_login();
-                }
-            }
-            KeyCode::Char('3') => {
                 if self.is_api_login_allowed() {
                     self.start_api_key_entry();
                 } else {
@@ -298,16 +293,9 @@ impl AuthModeWidget {
             chatgpt_description,
         ));
         lines.push("".into());
-        lines.extend(create_mode_item(
-            1,
-            AuthMode::OCA,
-            "Sign in with OCA",
-            "Sign in with Oracle Code Assist",
-        ));
-        lines.push("".into());
         if self.is_api_login_allowed() {
             lines.extend(create_mode_item(
-                2,
+                1,
                 AuthMode::ApiKey,
                 "Provide your own API key",
                 "Pay for what you use",
