@@ -457,7 +457,7 @@ async fn run_ratatui_app(
     }
 
     // uncomment this if you want to check if the user actually has access to models they are requesting
-    // confirm_oca_model(&mut config).await;
+    confirm_oca_model(&mut config).await;
 
     // Determine resume behavior: explicit id, then resume last, then picker.
     let resume_selection = if let Some(id_str) = cli.resume_session_id.as_deref() {

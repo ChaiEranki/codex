@@ -8,8 +8,8 @@ import subprocess
 import sys
 
 
-REPO = "openai/codex"
-BRANCH_REF = "heads/main"
+REPO = "ChaiEranki/codex"
+BRANCH_REF = "heads/oca-updates-cline"
 CARGO_TOML_PATH = "codex-rs/Cargo.toml"
 
 
@@ -271,12 +271,18 @@ def determine_version(args: argparse.Namespace) -> str:
 
 
 def get_latest_release_version() -> str:
-    response = run_gh_api(f"/repos/{REPO}/releases/latest")
-    tag = response.get("tag_name")
-    version = strip_tag_prefix(tag)
-    if not version:
-        raise ReleaseError("Latest release tag has unexpected format.")
-    return version
+    try:
+        response = run_gh_api(f"/repos/{REPO}/releases/latest")
+        tag = response.get("tag_name")
+        version = strip_tag_prefix(tag)
+        if not version:
+            raise ReleaseError("Latest release tag has unexpected format.")
+        return version
+    except ReleaseError as e:
+        if "Not Found" in str(e) or "404" in str(e):
+            # No releases exist yet, start with 0.1.0
+            return "0.1.0"
+        raise
 
 
 def list_releases() -> list[dict]:
