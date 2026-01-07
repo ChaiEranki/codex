@@ -385,6 +385,7 @@ async fn run_ratatui_app(
         initial_config.codex_home.clone(),
         false,
         initial_config.cli_auth_credentials_store_mode,
+        initial_config.model_provider.clone(),
     );
     let login_status = get_login_status(&initial_config);
     let should_show_trust_screen = should_show_trust_screen(&initial_config);
@@ -394,7 +395,11 @@ async fn run_ratatui_app(
     let config = if should_show_onboarding {
         let onboarding_result = run_onboarding_app(
             OnboardingScreenArgs {
-                show_login_screen: should_show_login_screen(login_status, &initial_config),
+                show_login_screen: should_show_openai_login_screen(login_status, &initial_config),
+                show_custom_login_screen: should_show_custom_provider_login_screen(
+                    login_status,
+                    &initial_config,
+                ),
                 show_trust_screen: should_show_trust_screen,
                 login_status,
                 auth_manager: auth_manager.clone(),
@@ -533,12 +538,25 @@ pub enum LoginStatus {
 }
 
 fn get_login_status(config: &Config) -> LoginStatus {
-    if config.model_provider.requires_openai_auth {
+    if config.model_provider.requires_openai_auth || config.model_provider.requires_custom_oauth {
         // Reading the OpenAI API key is an async operation because it may need
         // to refresh the token. Block on it.
         let codex_home = config.codex_home.clone();
-        match CodexAuth::from_auth_storage(&codex_home, config.cli_auth_credentials_store_mode) {
-            Ok(Some(auth)) => LoginStatus::AuthMode(auth.mode),
+        match CodexAuth::from_auth_storage(
+            &codex_home,
+            config.cli_auth_credentials_store_mode,
+            Some(config.model_provider.clone()),
+        ) {
+            Ok(Some(auth)) => match auth.mode {
+                AuthMode::ChatGPT | AuthMode::ApiKey => LoginStatus::AuthMode(auth.mode),
+                AuthMode::ProviderOAuth => {
+                    if auth.auth_mode_name == Some(config.model_provider.name.clone()) {
+                        LoginStatus::AuthMode(auth.mode)
+                    } else {
+                        LoginStatus::NotAuthenticated
+                    }
+                }
+            },
             Ok(None) => LoginStatus::NotAuthenticated,
             Err(err) => {
                 error!("Failed to read auth.json: {err}");
@@ -589,10 +607,11 @@ fn should_show_onboarding(
         return true;
     }
 
-    should_show_login_screen(login_status, config)
+    should_show_openai_login_screen(login_status, config)
+        || should_show_custom_provider_login_screen(login_status, config)
 }
 
-fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool {
+fn should_show_openai_login_screen(login_status: LoginStatus, config: &Config) -> bool {
     // Only show the login screen for providers that actually require OpenAI auth
     // (OpenAI or equivalents). For OSS/other providers, skip login entirely.
     if !config.model_provider.requires_openai_auth {
@@ -600,6 +619,16 @@ fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool 
     }
 
     login_status == LoginStatus::NotAuthenticated
+}
+
+fn should_show_custom_provider_login_screen(login_status: LoginStatus, config: &Config) -> bool {
+    // Only show the login screen for providers that actually require OpenAI auth
+    // (OpenAI or equivalents). For OSS/other providers, skip login entirely.
+    if !config.model_provider.requires_custom_oauth {
+        return false;
+    }
+
+    login_status != LoginStatus::AuthMode(AuthMode::ProviderOAuth)
 }
 
 #[cfg(test)]

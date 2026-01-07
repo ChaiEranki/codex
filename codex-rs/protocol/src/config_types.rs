@@ -69,6 +69,7 @@ pub enum SandboxMode {
 pub enum ForcedLoginMethod {
     Chatgpt,
     Api,
+    ProviderOAuth,
 }
 
 /// Represents the trust level for a project directory.

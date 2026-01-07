@@ -66,6 +66,7 @@ pub async fn load_auth_manager() -> Option<AuthManager> {
         config.codex_home,
         false,
         config.cli_auth_credentials_store_mode,
+        config.model_provider,
     ))
 }
 

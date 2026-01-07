@@ -5,6 +5,7 @@ use chrono::Duration as ChronoDuration;
 use chrono::TimeZone;
 use chrono::Utc;
 use codex_core::AuthManager;
+use codex_core::ModelProviderInfo;
 use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
 use codex_core::models_manager::manager::ModelsManager;
@@ -34,6 +35,7 @@ fn test_auth_manager(config: &Config) -> AuthManager {
         config.codex_home.clone(),
         false,
         config.cli_auth_credentials_store_mode,
+        ModelProviderInfo::create_openai_provider(),
     )
 }
 

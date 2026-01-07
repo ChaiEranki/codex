@@ -23,7 +23,7 @@ pub async fn init_chatgpt_token_from_auth(
     codex_home: &Path,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
 ) -> std::io::Result<()> {
-    let auth = CodexAuth::from_auth_storage(codex_home, auth_credentials_store_mode)?;
+    let auth = CodexAuth::from_auth_storage(codex_home, auth_credentials_store_mode, None)?;
     if let Some(auth) = auth {
         let token_data = auth.get_token_data().await?;
         set_chatgpt_token_data(token_data);

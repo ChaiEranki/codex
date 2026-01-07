@@ -57,6 +57,7 @@ impl MessageProcessor {
             config.codex_home.clone(),
             false,
             config.cli_auth_credentials_store_mode,
+            config.model_provider.clone(),
         );
         let conversation_manager =
             Arc::new(ConversationManager::new(auth_manager, SessionSource::Mcp));

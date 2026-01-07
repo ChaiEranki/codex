@@ -34,6 +34,7 @@ fn test_auth_manager(config: &Config) -> AuthManager {
         config.codex_home.clone(),
         false,
         config.cli_auth_credentials_store_mode,
+        config.model_provider.clone(),
     )
 }
 

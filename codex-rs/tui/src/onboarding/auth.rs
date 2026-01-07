@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use codex_core::AuthManager;
+use codex_core::ModelProviderInfo;
 use codex_core::auth::AuthCredentialsStoreMode;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::login_with_api_key;
@@ -119,6 +120,7 @@ impl KeyboardHandler for AuthModeWidget {
                         AuthMode::ApiKey => {
                             self.disallow_api_login();
                         }
+                        AuthMode::ProviderOAuth => {}
                     },
                     SignInState::ChatGptSuccessMessage => {
                         *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
@@ -649,6 +651,261 @@ impl WidgetRef for AuthModeWidget {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum CustomSignInState {
+    PickMode,
+    ContinueInBrowser(ContinueInBrowserState),
+    SuccessMessage,
+    Success,
+}
+
+#[derive(Clone)]
+pub(crate) struct CustomAuthModeWidget {
+    pub request_frame: FrameRequester,
+    pub sign_in_state: Arc<RwLock<CustomSignInState>>,
+    pub codex_home: PathBuf,
+    pub cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+    pub login_status: LoginStatus,
+    pub auth_manager: Arc<AuthManager>,
+    pub animations_enabled: bool,
+    pub error: Option<String>,
+    pub provider: ModelProviderInfo,
+}
+
+impl CustomAuthModeWidget {
+    fn render_pick_mode(&self, area: Rect, buf: &mut Buffer) {
+        let lines = vec![
+            Line::from(vec![
+                "> ".into(),
+                format!("Sign in with {}", self.provider.name).cyan(),
+            ]),
+            "".into(),
+            "  Press Enter to continue".dim().into(),
+        ];
+
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn render_continue_in_browser(&self, area: Rect, buf: &mut Buffer) {
+        let mut spans = vec!["  ".into()];
+        if self.animations_enabled {
+            // Schedule a follow-up frame to keep the shimmer animation going.
+            self.request_frame
+                .schedule_frame_in(std::time::Duration::from_millis(100));
+            spans.extend(shimmer_spans("Finish signing in via your browser"));
+        } else {
+            spans.push("Finish signing in via your browser".into());
+        }
+        let mut lines = vec![spans.into(), "".into()];
+
+        let sign_in_state = self.sign_in_state.read().unwrap();
+        if let CustomSignInState::ContinueInBrowser(state) = &*sign_in_state
+            && !state.auth_url.is_empty()
+        {
+            lines.push("  If the link doesn't open automatically, open the following link to authenticate:".into());
+            lines.push("".into());
+            lines.push(Line::from(state.auth_url.as_str().cyan().underlined()));
+            lines.push("".into());
+        }
+
+        lines.push("  Press Esc to cancel".dim().into());
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn render_success_message(&self, area: Rect, buf: &mut Buffer) {
+        let lines = vec![
+            format!("✓ Signed in with your {} account", self.provider.name)
+                .fg(Color::Green)
+                .into(),
+            "".into(),
+            "  Before you start:".into(),
+            "".into(),
+            "  Decide how much autonomy you want to grant Codex".into(),
+            Line::from(vec![
+                "  For more details see the ".into(),
+                "\u{1b}]8;;https://github.com/openai/codex\u{7}Codex docs\u{1b}]8;;\u{7}"
+                    .underlined(),
+            ])
+            .dim(),
+            "".into(),
+            "  Codex can make mistakes".into(),
+            "  Review the code it writes and commands it runs"
+                .dim()
+                .into(),
+            "".into(),
+            format!("  Powered by your {} account", self.provider.name).into(),
+            Line::from(vec!["  Uses your plan's rate limits".into()]).dim(),
+            "".into(),
+            "  Press Enter to continue".fg(Color::Cyan).into(),
+        ];
+
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn render_success(&self, area: Rect, buf: &mut Buffer) {
+        let lines = vec![
+            "✓ Signed in with your custom model provider account"
+                .fg(Color::Green)
+                .into(),
+        ];
+
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn start_custom_login(&mut self) {
+        // If we're already authenticated with custom provider, don't start a new login –
+        // just proceed to the success message flow.
+        if matches!(
+            self.login_status,
+            LoginStatus::AuthMode(AuthMode::ProviderOAuth)
+        ) && match self.auth_manager.auth() {
+            Some(auth) => auth.auth_mode_name == Some(self.provider.name.clone()),
+            None => false,
+        } {
+            *self.sign_in_state.write().unwrap() = CustomSignInState::Success;
+            self.request_frame.schedule_frame();
+            return;
+        }
+
+        self.error = None;
+        let opts = ServerOptions {
+            client_id: self.provider.client_id.clone().unwrap_or_default(),
+            codex_home: self.codex_home.clone(),
+            issuer: self.provider.issuer.clone().unwrap_or_default(),
+            issuer_path_prefix: self.provider.issuer_path_prefix.clone().unwrap_or_default(),
+            provider: Some(self.provider.clone()),
+            open_browser: true,
+            port: self.provider.auth_server_port.unwrap_or_default(),
+            redirect_callback_path: self
+                .provider
+                .redirect_callback_path
+                .clone()
+                .unwrap_or_default(),
+            cli_auth_credentials_store_mode: self.cli_auth_credentials_store_mode,
+            forced_chatgpt_workspace_id: None,
+            force_state: None,
+        };
+        match run_login_server(opts) {
+            Ok(child) => {
+                let sign_in_state = self.sign_in_state.clone();
+                let request_frame = self.request_frame.clone();
+                let auth_manager = self.auth_manager.clone();
+                tokio::spawn(async move {
+                    let auth_url = child.auth_url.clone();
+                    {
+                        *sign_in_state.write().unwrap() =
+                            CustomSignInState::ContinueInBrowser(ContinueInBrowserState {
+                                auth_url,
+                                shutdown_flag: Some(child.cancel_handle()),
+                            });
+                    }
+                    request_frame.schedule_frame();
+                    let r = child.block_until_done().await;
+                    match r {
+                        Ok(()) => {
+                            // Force the auth manager to reload the new auth information.
+                            auth_manager.reload();
+
+                            *sign_in_state.write().unwrap() = CustomSignInState::SuccessMessage;
+                            request_frame.schedule_frame();
+                        }
+                        _ => {
+                            *sign_in_state.write().unwrap() =
+                                CustomSignInState::ContinueInBrowser(ContinueInBrowserState {
+                                    auth_url: "".to_string(),
+                                    shutdown_flag: None,
+                                });
+                            // self.error = Some(e.to_string());
+                            request_frame.schedule_frame();
+                        }
+                    }
+                });
+            }
+            Err(e) => {
+                *self.sign_in_state.write().unwrap() =
+                    CustomSignInState::ContinueInBrowser(ContinueInBrowserState {
+                        auth_url: "".to_string(),
+                        shutdown_flag: None,
+                    });
+                self.error = Some(e.to_string());
+                self.request_frame.schedule_frame();
+            }
+        }
+    }
+}
+
+impl KeyboardHandler for CustomAuthModeWidget {
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Enter => {
+                let sign_in_state = { (*self.sign_in_state.read().unwrap()).clone() };
+                match sign_in_state {
+                    CustomSignInState::PickMode => {
+                        self.start_custom_login();
+                    }
+                    CustomSignInState::SuccessMessage => {
+                        *self.sign_in_state.write().unwrap() = CustomSignInState::Success;
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Esc => {
+                tracing::info!("Esc pressed");
+                let sign_in_state = { (*self.sign_in_state.read().unwrap()).clone() };
+                if matches!(sign_in_state, CustomSignInState::ContinueInBrowser(_)) {
+                    *self.sign_in_state.write().unwrap() = CustomSignInState::PickMode;
+                    self.request_frame.schedule_frame();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_paste(&mut self, _pasted: String) {
+        // No paste handling for custom auth
+    }
+}
+
+impl StepStateProvider for CustomAuthModeWidget {
+    fn get_step_state(&self) -> StepState {
+        let sign_in_state = self.sign_in_state.read().unwrap();
+        match &*sign_in_state {
+            CustomSignInState::PickMode
+            | CustomSignInState::ContinueInBrowser(_)
+            | CustomSignInState::SuccessMessage => StepState::InProgress,
+            CustomSignInState::Success => StepState::Complete,
+        }
+    }
+}
+
+impl WidgetRef for CustomAuthModeWidget {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        let sign_in_state = self.sign_in_state.read().unwrap();
+        match &*sign_in_state {
+            CustomSignInState::PickMode => {
+                self.render_pick_mode(area, buf);
+            }
+            CustomSignInState::ContinueInBrowser(_) => {
+                self.render_continue_in_browser(area, buf);
+            }
+            CustomSignInState::SuccessMessage => {
+                self.render_success_message(area, buf);
+            }
+            CustomSignInState::Success => {
+                self.render_success(area, buf);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -672,6 +929,7 @@ mod tests {
                 codex_home_path,
                 false,
                 AuthCredentialsStoreMode::File,
+                ModelProviderInfo::create_openai_provider(),
             ),
             forced_chatgpt_workspace_id: None,
             forced_login_method: Some(ForcedLoginMethod::Chatgpt),

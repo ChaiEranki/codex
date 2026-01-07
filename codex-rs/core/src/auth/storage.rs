@@ -44,6 +44,9 @@ pub struct AuthDotJson {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_refresh: Option<DateTime<Utc>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_mode: Option<String>,
 }
 
 pub(super) fn get_auth_file(codex_home: &Path) -> PathBuf {
@@ -280,6 +283,7 @@ fn create_auth_storage_with_keyring_store(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CHATGPT_AUTH_MODE;
     use crate::token_data::IdTokenInfo;
     use anyhow::Context;
     use base64::Engine;
@@ -298,6 +302,7 @@ mod tests {
             openai_api_key: Some("test-key".to_string()),
             tokens: None,
             last_refresh: Some(Utc::now()),
+            auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         };
 
         storage
@@ -317,6 +322,7 @@ mod tests {
             openai_api_key: Some("test-key".to_string()),
             tokens: None,
             last_refresh: Some(Utc::now()),
+            auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         };
 
         let file = get_auth_file(codex_home.path());
@@ -338,6 +344,7 @@ mod tests {
             openai_api_key: Some("sk-test-key".to_string()),
             tokens: None,
             last_refresh: None,
+            auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         };
         let storage = create_auth_storage(dir.path().to_path_buf(), AuthCredentialsStoreMode::File);
         storage.save(&auth_dot_json)?;
@@ -432,6 +439,7 @@ mod tests {
                 account_id: Some(format!("{prefix}-account-id")),
             }),
             last_refresh: None,
+            auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         }
     }
 
@@ -447,6 +455,7 @@ mod tests {
             openai_api_key: Some("sk-test".to_string()),
             tokens: None,
             last_refresh: None,
+            auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         };
         seed_keyring_with_auth(
             &mock_keyring,
@@ -488,6 +497,7 @@ mod tests {
                 account_id: Some("account".to_string()),
             }),
             last_refresh: Some(Utc::now()),
+            auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         };
 
         storage.save(&auth)?;

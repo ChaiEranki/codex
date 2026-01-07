@@ -119,6 +119,7 @@ impl KeyboardHandler for AuthModeWidget {
                         AuthMode::ApiKey => {
                             self.disallow_api_login();
                         }
+                        AuthMode::ProviderOAuth => {}
                     },
                     SignInState::ChatGptSuccessMessage => {
                         *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
@@ -655,6 +656,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 
+    use codex_core::ModelProviderInfo;
     use codex_core::auth::AuthCredentialsStoreMode;
 
     fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
@@ -672,6 +674,7 @@ mod tests {
                 codex_home_path,
                 false,
                 AuthCredentialsStoreMode::File,
+                ModelProviderInfo::create_openai_provider(),
             ),
             forced_chatgpt_workspace_id: None,
             forced_login_method: Some(ForcedLoginMethod::Chatgpt),

@@ -731,6 +731,10 @@ pub enum Account {
     #[serde(rename = "chatgpt", rename_all = "camelCase")]
     #[ts(rename = "chatgpt", rename_all = "camelCase")]
     Chatgpt { email: String, plan_type: PlanType },
+
+    #[serde(rename = "providerOauth", rename_all = "camelCase")]
+    #[ts(rename = "providerOauth", rename_all = "camelCase")]
+    ProviderOauth {},
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
