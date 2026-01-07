@@ -401,6 +401,7 @@ async fn run_ratatui_app(
         initial_config.codex_home.clone(),
         false,
         initial_config.cli_auth_credentials_store_mode,
+        initial_config.model_provider.clone(),
     );
     let login_status = get_login_status(&initial_config);
     let should_show_trust_screen = should_show_trust_screen(&initial_config);
@@ -572,7 +573,11 @@ fn get_login_status(config: &Config) -> LoginStatus {
         // Reading the OpenAI API key is an async operation because it may need
         // to refresh the token. Block on it.
         let codex_home = config.codex_home.clone();
-        match CodexAuth::from_auth_storage(&codex_home, config.cli_auth_credentials_store_mode) {
+        match CodexAuth::from_auth_storage(
+            &codex_home,
+            config.cli_auth_credentials_store_mode,
+            Some(config.model_provider.clone()),
+        ) {
             Ok(Some(auth)) => LoginStatus::AuthMode(auth.mode),
             Ok(None) => LoginStatus::NotAuthenticated,
             Err(err) => {

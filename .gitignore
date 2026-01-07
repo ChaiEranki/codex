@@ -90,3 +90,5 @@ CHANGELOG.ignore.md
 __pycache__/
 *.pyc
 
+.cargo/
+

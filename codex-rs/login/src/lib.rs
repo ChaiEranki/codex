@@ -3,6 +3,8 @@ mod pkce;
 mod server;
 
 pub use device_code_auth::run_device_code_login;
+pub use server::DEFAULT_ISSUER_PATH_PREFIX;
+pub use server::DEFAULT_REDIRECT_CALLBACK_PATH;
 pub use server::LoginServer;
 pub use server::ServerOptions;
 pub use server::ShutdownHandle;

@@ -99,6 +99,37 @@ pub struct ModelProviderInfo {
     /// and API key (if needed) comes from the "env_key" environment variable.
     #[serde(default)]
     pub requires_openai_auth: bool,
+
+    // Does the provider use it's own oauth mechanism, if so the following fields are to do
+    // with configuration of it
+
+    // Flag for whether to use custom oauth
+    #[serde(default)]
+    pub requires_custom_oauth: bool,
+
+    // client id for oauth
+    pub client_id: Option<String>,
+
+    // issuer for oauth
+    pub issuer: Option<String>,
+
+    // refresh_token_path
+    pub refresh_token_path: Option<String>,
+
+    // issuer_path_prefix
+    pub issuer_path_prefix: Option<String>,
+
+    // redirect callback path
+    pub redirect_callback_path: Option<String>,
+
+    // refresh token form data
+    pub refresh_token_form_data: Option<bool>,
+
+    // port for auth server for oauth
+    pub auth_server_port: Option<u16>,
+
+    // refresh token interval in minutes
+    pub refresh_token_interval_minutes: Option<i64>,
 }
 
 impl ModelProviderInfo {
@@ -247,6 +278,15 @@ impl ModelProviderInfo {
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
             requires_openai_auth: true,
+            requires_custom_oauth: false,
+            auth_server_port: None,
+            client_id: None,
+            issuer: None,
+            issuer_path_prefix: None,
+            redirect_callback_path: None,
+            refresh_token_form_data: None,
+            refresh_token_path: None,
+            refresh_token_interval_minutes: None,
         }
     }
 
@@ -320,6 +360,15 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         stream_max_retries: None,
         stream_idle_timeout_ms: None,
         requires_openai_auth: false,
+        requires_custom_oauth: false,
+        auth_server_port: None,
+        client_id: None,
+        issuer: None,
+        issuer_path_prefix: None,
+        redirect_callback_path: None,
+        refresh_token_form_data: None,
+        refresh_token_path: None,
+        refresh_token_interval_minutes: None,
     }
 }
 
@@ -348,6 +397,15 @@ base_url = "http://localhost:11434/v1"
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
             requires_openai_auth: false,
+            requires_custom_oauth: false,
+            auth_server_port: None,
+            client_id: None,
+            issuer: None,
+            issuer_path_prefix: None,
+            redirect_callback_path: None,
+            refresh_token_form_data: None,
+            refresh_token_path: None,
+            refresh_token_interval_minutes: None,
         };
 
         let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -378,6 +436,15 @@ query_params = { api-version = "2025-04-01-preview" }
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
             requires_openai_auth: false,
+            requires_custom_oauth: false,
+            auth_server_port: None,
+            client_id: None,
+            issuer: None,
+            issuer_path_prefix: None,
+            redirect_callback_path: None,
+            refresh_token_form_data: None,
+            refresh_token_path: None,
+            refresh_token_interval_minutes: None,
         };
 
         let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -411,6 +478,15 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
             requires_openai_auth: false,
+            requires_custom_oauth: false,
+            auth_server_port: None,
+            client_id: None,
+            issuer: None,
+            issuer_path_prefix: None,
+            redirect_callback_path: None,
+            refresh_token_form_data: None,
+            refresh_token_path: None,
+            refresh_token_interval_minutes: None,
         };
 
         let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -442,6 +518,15 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
                 stream_max_retries: None,
                 stream_idle_timeout_ms: None,
                 requires_openai_auth: false,
+                requires_custom_oauth: false,
+                auth_server_port: None,
+                client_id: None,
+                issuer: None,
+                issuer_path_prefix: None,
+                redirect_callback_path: None,
+                refresh_token_form_data: None,
+                refresh_token_path: None,
+                refresh_token_interval_minutes: None,
             };
             let api = provider.to_api_provider(None).expect("api provider");
             assert!(
@@ -464,6 +549,15 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
             requires_openai_auth: false,
+            requires_custom_oauth: false,
+            auth_server_port: None,
+            client_id: None,
+            issuer: None,
+            issuer_path_prefix: None,
+            redirect_callback_path: None,
+            refresh_token_form_data: None,
+            refresh_token_path: None,
+            refresh_token_interval_minutes: None,
         };
         let named_api = named_provider.to_api_provider(None).expect("api provider");
         assert!(named_api.is_azure_responses_endpoint());
@@ -488,6 +582,15 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
                 stream_max_retries: None,
                 stream_idle_timeout_ms: None,
                 requires_openai_auth: false,
+                requires_custom_oauth: false,
+                auth_server_port: None,
+                client_id: None,
+                issuer: None,
+                issuer_path_prefix: None,
+                redirect_callback_path: None,
+                refresh_token_form_data: None,
+                refresh_token_path: None,
+                refresh_token_interval_minutes: None,
             };
             let api = provider.to_api_provider(None).expect("api provider");
             assert!(

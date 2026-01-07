@@ -73,6 +73,15 @@ async fn continue_after_stream_error() {
         stream_max_retries: Some(1),
         stream_idle_timeout_ms: Some(2_000),
         requires_openai_auth: false,
+        requires_custom_oauth: false,
+        auth_server_port: None,
+        client_id: None,
+        issuer: None,
+        issuer_path_prefix: None,
+        redirect_callback_path: None,
+        refresh_token_form_data: None,
+        refresh_token_path: None,
+        refresh_token_interval_minutes: None,
     };
 
     let TestCodex { codex, .. } = test_codex()

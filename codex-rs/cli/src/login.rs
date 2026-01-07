@@ -153,7 +153,11 @@ pub async fn run_login_with_device_code(
 pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
 
-    match CodexAuth::from_auth_storage(&config.codex_home, config.cli_auth_credentials_store_mode) {
+    match CodexAuth::from_auth_storage(
+        &config.codex_home,
+        config.cli_auth_credentials_store_mode,
+        Some(config.model_provider.clone()),
+    ) {
         Ok(Some(auth)) => match auth.mode {
             AuthMode::ApiKey => match auth.get_token().await {
                 Ok(api_key) => {
@@ -167,6 +171,10 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
             },
             AuthMode::ChatGPT => {
                 eprintln!("Logged in using ChatGPT");
+                std::process::exit(0);
+            }
+            AuthMode::ProviderOAuth => {
+                eprintln!("Logged in using ProviderOAuth");
                 std::process::exit(0);
             }
         },

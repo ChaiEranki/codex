@@ -3,6 +3,7 @@ use anyhow::Result;
 use base64::Engine;
 use chrono::Duration;
 use chrono::Utc;
+use codex_core::CHATGPT_AUTH_MODE;
 use codex_core::CodexAuth;
 use codex_core::auth::AuthCredentialsStoreMode;
 use codex_core::auth::AuthDotJson;
@@ -184,6 +185,7 @@ impl RefreshTokenTestContext {
             openai_api_key: None,
             tokens: Some(tokens),
             last_refresh: Some(initial_last_refresh),
+            auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
         };
         save_auth(
             codex_home.path(),
@@ -194,8 +196,9 @@ impl RefreshTokenTestContext {
         let endpoint = format!("{}/oauth/token", server.uri());
         let env_guard = EnvGuard::set(REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR, endpoint);
 
-        let auth = CodexAuth::from_auth_storage(codex_home.path(), AuthCredentialsStoreMode::File)?
-            .context("auth should load from storage")?;
+        let auth =
+            CodexAuth::from_auth_storage(codex_home.path(), AuthCredentialsStoreMode::File, None)?
+                .context("auth should load from storage")?;
 
         Ok(Self {
             codex_home,

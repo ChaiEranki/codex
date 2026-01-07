@@ -285,6 +285,7 @@ pub async fn run_main(cli: Cli, codex_linux_sandbox_exe: Option<PathBuf>) -> any
         config.codex_home.clone(),
         true,
         config.cli_auth_credentials_store_mode,
+        config.model_provider.clone(),
     );
     let conversation_manager = ConversationManager::new(auth_manager.clone(), SessionSource::Exec);
     let default_model = conversation_manager

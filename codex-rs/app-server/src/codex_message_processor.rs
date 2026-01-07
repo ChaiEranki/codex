@@ -1036,6 +1036,7 @@ impl CodexMessageProcessor {
                         }
                     }
                 }
+                AuthMode::ProviderOAuth => Account::ProviderOauth {},
             }),
             None => None,
         };

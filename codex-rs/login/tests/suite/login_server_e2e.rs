@@ -8,6 +8,8 @@ use std::time::Duration;
 use anyhow::Result;
 use base64::Engine;
 use codex_core::auth::AuthCredentialsStoreMode;
+use codex_login::DEFAULT_ISSUER_PATH_PREFIX;
+use codex_login::DEFAULT_REDIRECT_CALLBACK_PATH;
 use codex_login::ServerOptions;
 use codex_login::run_login_server;
 use core_test_support::skip_if_no_network;
@@ -114,10 +116,13 @@ async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix: DEFAULT_ISSUER_PATH_PREFIX.to_string(),
+        redirect_callback_path: DEFAULT_REDIRECT_CALLBACK_PATH.to_string(),
         port: 0,
         open_browser: false,
         force_state: Some(state),
         forced_chatgpt_workspace_id: Some(chatgpt_account_id.to_string()),
+        provider: None,
     };
     let server = run_login_server(opts)?;
     assert!(
@@ -175,10 +180,13 @@ async fn creates_missing_codex_home_dir() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix: DEFAULT_ISSUER_PATH_PREFIX.to_string(),
+        redirect_callback_path: DEFAULT_REDIRECT_CALLBACK_PATH.to_string(),
         port: 0,
         open_browser: false,
         force_state: Some(state),
         forced_chatgpt_workspace_id: None,
+        provider: None,
     };
     let server = run_login_server(opts)?;
     let login_port = server.actual_port;
@@ -214,10 +222,13 @@ async fn forced_chatgpt_workspace_id_mismatch_blocks_login() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix: DEFAULT_ISSUER_PATH_PREFIX.to_string(),
+        redirect_callback_path: DEFAULT_REDIRECT_CALLBACK_PATH.to_string(),
         port: 0,
         open_browser: false,
         force_state: Some(state.clone()),
         forced_chatgpt_workspace_id: Some("org-required".to_string()),
+        provider: None,
     };
     let server = run_login_server(opts)?;
     assert!(
@@ -270,10 +281,13 @@ async fn cancels_previous_login_server_when_port_is_in_use() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer: issuer.clone(),
+        issuer_path_prefix: DEFAULT_ISSUER_PATH_PREFIX.to_string(),
+        redirect_callback_path: DEFAULT_REDIRECT_CALLBACK_PATH.to_string(),
         port: 0,
         open_browser: false,
         force_state: Some("cancel_state".to_string()),
         forced_chatgpt_workspace_id: None,
+        provider: None,
     };
 
     let first_server = run_login_server(first_opts)?;
@@ -290,10 +304,13 @@ async fn cancels_previous_login_server_when_port_is_in_use() -> Result<()> {
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer,
+        issuer_path_prefix: DEFAULT_ISSUER_PATH_PREFIX.to_string(),
+        redirect_callback_path: DEFAULT_REDIRECT_CALLBACK_PATH.to_string(),
         port: login_port,
         open_browser: false,
         force_state: Some("cancel_state_2".to_string()),
         forced_chatgpt_workspace_id: None,
+        provider: None,
     };
 
     let second_server = run_login_server(second_opts)?;

@@ -562,12 +562,15 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
     let mut config = load_default_config_for_test(&codex_home).await;
     config.model_provider = model_provider;
 
-    let auth_manager =
-        match CodexAuth::from_auth_storage(codex_home.path(), AuthCredentialsStoreMode::File) {
-            Ok(Some(auth)) => codex_core::AuthManager::from_auth_for_testing(auth),
-            Ok(None) => panic!("No CodexAuth found in codex_home"),
-            Err(e) => panic!("Failed to load CodexAuth: {e}"),
-        };
+    let auth_manager = match CodexAuth::from_auth_storage(
+        codex_home.path(),
+        AuthCredentialsStoreMode::File,
+        Some(config.model_provider.clone()),
+    ) {
+        Ok(Some(auth)) => codex_core::AuthManager::from_auth_for_testing(auth),
+        Ok(None) => panic!("No CodexAuth found in codex_home"),
+        Err(e) => panic!("Failed to load CodexAuth: {e}"),
+    };
     let conversation_manager = ConversationManager::new(auth_manager, SessionSource::Exec);
     let NewConversation {
         conversation: codex,
@@ -1116,6 +1119,15 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         stream_max_retries: Some(0),
         stream_idle_timeout_ms: Some(5_000),
         requires_openai_auth: false,
+        requires_custom_oauth: false,
+        auth_server_port: None,
+        client_id: None,
+        issuer: None,
+        issuer_path_prefix: None,
+        redirect_callback_path: None,
+        refresh_token_form_data: None,
+        refresh_token_path: None,
+        refresh_token_interval_minutes: None,
     };
 
     let codex_home = TempDir::new().unwrap();
@@ -1612,6 +1624,15 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         stream_max_retries: None,
         stream_idle_timeout_ms: None,
         requires_openai_auth: false,
+        requires_custom_oauth: false,
+        auth_server_port: None,
+        client_id: None,
+        issuer: None,
+        issuer_path_prefix: None,
+        redirect_callback_path: None,
+        refresh_token_form_data: None,
+        refresh_token_path: None,
+        refresh_token_interval_minutes: None,
     };
 
     // Init session
@@ -1694,6 +1715,15 @@ async fn env_var_overrides_loaded_auth() {
         stream_max_retries: None,
         stream_idle_timeout_ms: None,
         requires_openai_auth: false,
+        requires_custom_oauth: false,
+        auth_server_port: None,
+        client_id: None,
+        issuer: None,
+        issuer_path_prefix: None,
+        redirect_callback_path: None,
+        refresh_token_form_data: None,
+        refresh_token_path: None,
+        refresh_token_interval_minutes: None,
     };
 
     // Init session

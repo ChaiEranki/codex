@@ -14,6 +14,8 @@ use crate::pkce::PkceCodes;
 use crate::pkce::generate_pkce;
 use base64::Engine;
 use chrono::Utc;
+use codex_core::CHATGPT_AUTH_MODE;
+use codex_core::ModelProviderInfo;
 use codex_core::auth::AuthCredentialsStoreMode;
 use codex_core::auth::AuthDotJson;
 use codex_core::auth::save_auth;
@@ -30,17 +32,22 @@ use tiny_http::StatusCode;
 
 const DEFAULT_ISSUER: &str = "https://auth.openai.com";
 const DEFAULT_PORT: u16 = 1455;
+pub const DEFAULT_REDIRECT_CALLBACK_PATH: &str = "/auth/callback";
+pub const DEFAULT_ISSUER_PATH_PREFIX: &str = "/oauth";
 
 #[derive(Debug, Clone)]
 pub struct ServerOptions {
     pub codex_home: PathBuf,
     pub client_id: String,
     pub issuer: String,
+    pub issuer_path_prefix: String,
+    pub redirect_callback_path: String,
     pub port: u16,
     pub open_browser: bool,
     pub force_state: Option<String>,
     pub forced_chatgpt_workspace_id: Option<String>,
     pub cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+    pub provider: Option<ModelProviderInfo>,
 }
 
 impl ServerOptions {
@@ -55,10 +62,13 @@ impl ServerOptions {
             client_id,
             issuer: DEFAULT_ISSUER.to_string(),
             port: DEFAULT_PORT,
+            issuer_path_prefix: DEFAULT_ISSUER_PATH_PREFIX.to_string(),
+            redirect_callback_path: DEFAULT_REDIRECT_CALLBACK_PATH.to_string(),
             open_browser: true,
             force_state: None,
             forced_chatgpt_workspace_id,
             cli_auth_credentials_store_mode,
+            provider: None,
         }
     }
 }
@@ -113,9 +123,13 @@ pub fn run_login_server(opts: ServerOptions) -> io::Result<LoginServer> {
     };
     let server = Arc::new(server);
 
-    let redirect_uri = format!("http://localhost:{actual_port}/auth/callback");
+    let redirect_uri = format!(
+        "http://localhost:{actual_port}{0}",
+        opts.redirect_callback_path
+    );
     let auth_url = build_authorize_url(
         &opts.issuer,
+        &opts.issuer_path_prefix,
         &opts.client_id,
         &redirect_uri,
         &pkce,
@@ -236,7 +250,7 @@ async fn process_request(
     let path = parsed_url.path().to_string();
 
     match path.as_str() {
-        "/auth/callback" => {
+        s if s == opts.redirect_callback_path.as_str() => {
             let params: std::collections::HashMap<String, String> =
                 parsed_url.query_pairs().into_owned().collect();
             if params.get("state").map(String::as_str) != Some(state) {
@@ -253,8 +267,15 @@ async fn process_request(
                 }
             };
 
-            match exchange_code_for_tokens(&opts.issuer, &opts.client_id, redirect_uri, pkce, &code)
-                .await
+            match exchange_code_for_tokens(
+                &opts.issuer,
+                &opts.issuer_path_prefix,
+                &opts.client_id,
+                redirect_uri,
+                pkce,
+                &code,
+            )
+            .await
             {
                 Ok(tokens) => {
                     if let Err(message) = ensure_workspace_allowed(
@@ -265,9 +286,14 @@ async fn process_request(
                         return login_error_response(&message);
                     }
                     // Obtain API key via token-exchange and persist
-                    let api_key = obtain_api_key(&opts.issuer, &opts.client_id, &tokens.id_token)
-                        .await
-                        .ok();
+                    let api_key = obtain_api_key(
+                        &opts.issuer,
+                        &opts.issuer_path_prefix,
+                        &opts.client_id,
+                        &tokens.id_token,
+                    )
+                    .await
+                    .ok();
                     if let Err(err) = persist_tokens_async(
                         &opts.codex_home,
                         api_key.clone(),
@@ -275,6 +301,7 @@ async fn process_request(
                         tokens.access_token.clone(),
                         tokens.refresh_token.clone(),
                         opts.cli_auth_credentials_store_mode,
+                        opts.provider.clone(),
                     )
                     .await
                     {
@@ -379,6 +406,7 @@ fn send_response_with_disconnect(
 
 fn build_authorize_url(
     issuer: &str,
+    issuer_path_prefix: &str,
     client_id: &str,
     redirect_uri: &str,
     pkce: &PkceCodes,
@@ -414,7 +442,7 @@ fn build_authorize_url(
         .map(|(k, v)| format!("{k}={}", urlencoding::encode(&v)))
         .collect::<Vec<_>>()
         .join("&");
-    format!("{issuer}/oauth/authorize?{qs}")
+    format!("{issuer}{issuer_path_prefix}/authorize?{qs}")
 }
 
 fn generate_state() -> String {
@@ -493,6 +521,7 @@ pub(crate) struct ExchangedTokens {
 
 pub(crate) async fn exchange_code_for_tokens(
     issuer: &str,
+    issues_path_prefix: &str,
     client_id: &str,
     redirect_uri: &str,
     pkce: &PkceCodes,
@@ -507,7 +536,7 @@ pub(crate) async fn exchange_code_for_tokens(
 
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{issuer}/oauth/token"))
+        .post(format!("{issuer}{issues_path_prefix}/token"))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(format!(
             "grant_type=authorization_code&code={}&redirect_uri={}&client_id={}&code_verifier={}",
@@ -542,6 +571,7 @@ pub(crate) async fn persist_tokens_async(
     access_token: String,
     refresh_token: String,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
+    provider: Option<ModelProviderInfo>,
 ) -> io::Result<()> {
     // Reuse existing synchronous logic but run it off the async runtime.
     let codex_home = codex_home.to_path_buf();
@@ -562,6 +592,10 @@ pub(crate) async fn persist_tokens_async(
             openai_api_key: api_key,
             tokens: Some(tokens),
             last_refresh: Some(Utc::now()),
+            auth_mode: match provider {
+                None => Some(CHATGPT_AUTH_MODE.to_string()),
+                Some(provider) => Some(provider.name),
+            },
         };
         save_auth(&codex_home, &auth, auth_credentials_store_mode)
     })
@@ -687,6 +721,7 @@ fn login_error_response(message: &str) -> HandledRequest {
 
 pub(crate) async fn obtain_api_key(
     issuer: &str,
+    issuer_path_prefix: &str,
     client_id: &str,
     id_token: &str,
 ) -> io::Result<String> {
@@ -697,7 +732,7 @@ pub(crate) async fn obtain_api_key(
     }
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("{issuer}/oauth/token"))
+        .post(format!("{issuer}{issuer_path_prefix}/token"))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(format!(
             "grant_type={}&client_id={}&requested_token={}&subject_token={}&subject_token_type={}",
